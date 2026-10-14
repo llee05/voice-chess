@@ -37,9 +37,9 @@
         </button>
       </div>
       <div class="transcript"></div>
-      <details><summary>How to speak a move</summary><div class="help">
-        <p class="examples">“e two to e four”<br>“knight to f three”<br>“queen takes h seven”<br>“castle kingside”</p>
-        <p>Say “stop” to turn the mic off. For clearer files, use alpha, bravo, charlie, delta, echo, foxtrot, golf, hotel.</p>
+      <details><summary>Standard notation</summary><div class="help">
+        <p class="examples">e4 — “e four”<br>Nf3 — “knight f three”<br>Qxh7 — “queen takes h seven”<br>O-O — “O O”</p>
+        <p>Use N, B, R, Q, K for pieces. Include captures (x), disambiguation (Ngf3), and promotion (e8=Q). Say “stop” to turn the mic off.</p>
         <p class="privacy">Your browser’s speech service may process audio online. Voice Chess saves no audio or transcripts.</p>
       </div></details>
     </section>`;
@@ -74,7 +74,7 @@
       if (command?.kind === 'stop') { speech.stop(); return; }
       if (command?.kind === 'help') { help.open = true; return; }
       if (busy) return;
-      if (!command) { status.textContent = 'Try “e two to e four” or “knight f three”.'; return; }
+      if (!command) { status.textContent = 'Use standard notation: e4 or Nf3 (“knight f three”).'; return; }
       try {
         const position = VoiceChessBoard.snapshot();
         const result = VoiceChessCommands.resolve(command, position.moves);
@@ -87,7 +87,7 @@
         const version = sessionVersion;
         let submissionError = false;
         try { VoiceChessBoard.play(position, move); } catch { submissionError = true; }
-        status.textContent = `Sent ${move.from} → ${move.to}${move.promotion ? ' = ' + move.promotion.toUpperCase() : ''}`;
+        status.textContent = `Sent ${move.san}`;
         // Some board versions throw after emitting a user move. Never resend it.
         pendingCheck = setTimeout(() => {
           busy = false;

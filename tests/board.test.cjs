@@ -10,7 +10,7 @@ function fixture() {
   const game = {
     getFEN: () => fen,
     getPlayingAs: () => 1,
-    getLegalMoves: () => [{ from: 'g1', to: 'f3' }, { from: 'e8', to: 'e7' }],
+    getLegalMoves: () => [{ from: 'g1', to: 'f3', san: 'Nf3' }, { from: 'e8', to: 'e7', san: 'Ke7' }],
     move: value => submissions.push(value),
   };
   const element = { game, getBoundingClientRect: () => ({ width: 400, height: 400 }) };
@@ -22,6 +22,7 @@ test('reads types from actual FEN and excludes the other side', () => {
   const position = board.snapshot(fixture().doc);
   assert.equal(position.moves.length, 1);
   assert.equal(position.moves[0].piece, 'n');
+  assert.equal(position.moves[0].san, 'Nf3');
 });
 
 test('submits one user move with animation', () => {
@@ -96,11 +97,17 @@ test('fails clearly when the API or player side is unavailable', () => {
 test('preserves native promotion casing', () => {
   const f = fixture();
   f.setFen('4k3/P7/8/8/8/8/8/4K3 w - - 0 1');
-  f.game.getLegalMoves = () => [{ from: 'a7', to: 'a8', promotion: 'N' }];
+  f.game.getLegalMoves = () => [{ from: 'a7', to: 'a8', promotion: 'N', san: 'a8=N' }];
   const position = board.snapshot(f.doc);
   assert.equal(position.moves[0].promotion, 'n');
   board.play(position, position.moves[0], f.doc);
   assert.equal(f.submissions[0].promotion, 'N');
+});
+
+test('fails clearly when native legal moves lack SAN', () => {
+  const f = fixture();
+  f.game.getLegalMoves = () => [{ from: 'g1', to: 'f3' }];
+  assert.throws(() => board.snapshot(f.doc), /does not provide standard move notation/);
 });
 
 test('rejects malformed piece placement', () => {

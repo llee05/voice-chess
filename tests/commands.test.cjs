@@ -3,77 +3,105 @@ const assert = require('node:assert/strict');
 const { load, plain } = require('./helpers.cjs');
 const { parse, resolve } = load('commands.js', 'VoiceChessCommands');
 
-for (const [text, expected] of [
-  ['e two to e four', { kind: 'move', from: 'e2', to: 'e4' }],
-  ['echo two to echo four', { kind: 'move', from: 'e2', to: 'e4' }],
-  ['Please move E2-E4.', { kind: 'move', from: 'e2', to: 'e4' }],
-  ['e2e4', { kind: 'move', from: 'e2', to: 'e4' }],
-  ['e4', { kind: 'move', piece: 'p', to: 'e4' }],
-  ['e four', { kind: 'move', piece: 'p', to: 'e4' }],
-  ['knight to f three', { kind: 'move', piece: 'n', to: 'f3' }],
-  ['night f3', { kind: 'move', piece: 'n', to: 'f3' }],
-  ['queen takes hotel seven', { kind: 'move', piece: 'q', to: 'h7' }],
-  ['bishop to see four', { kind: 'move', piece: 'b', to: 'c4' }],
-  ['rook a to e seven', { kind: 'move', piece: 'r', origin: 'a', to: 'e7' }],
-  ['rook one to a four', { kind: 'move', piece: 'r', origin: '1', to: 'a4' }],
-  ['knight from g one to f three', { kind: 'move', piece: 'n', from: 'g1', to: 'f3' }],
-  ['d takes e six', { kind: 'move', piece: 'p', origin: 'd', to: 'e6' }],
-  ['e seven to e eight promote to knight', { kind: 'move', from: 'e7', to: 'e8', promotion: 'n' }],
-  ['pawn a takes b eight promote to knight', { kind: 'move', piece: 'p', origin: 'a', to: 'b8', promotion: 'n' }],
-  ['e7e8q', { kind: 'move', from: 'e7', to: 'e8', promotion: 'q' }],
-  ['e8=Q', { kind: 'move', piece: 'p', to: 'e8', promotion: 'q' }],
-  ['exd5', { kind: 'move', piece: 'p', origin: 'e', to: 'd5' }],
-  ['Nf3', { kind: 'move', piece: 'n', to: 'f3' }],
-  ['Raxd1+', { kind: 'move', piece: 'r', origin: 'a', to: 'd1' }],
-  ['castle kingside', { kind: 'castle', side: 'king' }],
-  ['castle queen side', { kind: 'castle', side: 'queen' }],
-  ['O-O-O', { kind: 'castle', side: 'queen' }],
-  ['stop listening', { kind: 'stop' }],
-  ['help', { kind: 'help' }],
+for (const [text, san] of [
+  ['e4', 'e4'], ['e5', 'e5'], ['E4', 'e4'], ['e four', 'e4'], ['e five', 'e5'],
+  ['Nf3', 'Nf3'], ['nf3', 'Nf3'], ['N f three', 'Nf3'], ['en f three', 'Nf3'],
+  ['Knight f three.', 'Nf3'], ['night f3', 'Nf3'], ['Bb5', 'Bb5'],
+  ['Qxh7', 'Qxh7'], ['queen takes h seven', 'Qxh7'], ['queen x h7', 'Qxh7'],
+  ['exd5', 'exd5'], ['e takes d five', 'exd5'],
+  ['bxc5', 'bxc5'], ['Bxc5', 'Bxc5'], ['bishop takes c five', 'Bxc5'], ['B X c five', 'Bxc5'],
+  ['Ngf3', 'Ngf3'], ['knight g f three', 'Ngf3'], ['R1e2', 'R1e2'], ['rook one e two', 'R1e2'],
+  ['Rae2', 'Rae2'], ['Ng1f3', 'Ng1f3'], ['O-O', 'O-O'], ['0-0', 'O-O'], ['O O', 'O-O'],
+  ['O-O-O', 'O-O-O'], ['zero zero zero', 'O-O-O'],
+  ['e8=Q', 'e8=Q'], ['e eight equals queen', 'e8=Q'], ['e8=n', 'e8=N'], ['e eight equals knight', 'e8=N'],
+  ['axb8=N+', 'axb8=N+'], ['a takes b eight equals knight check', 'axb8=N+'], ['e1=R', 'e1=R'],
+  ['Qh7+', 'Qh7+'], ['queen h seven check', 'Qh7+'], ['Qh7#', 'Qh7#'], ['queen h seven check mate', 'Qh7#'],
 ]) {
-  test(`parses ${JSON.stringify(text)}`, () => assert.deepEqual(plain(parse(text)), expected));
+  test(`normalizes ${JSON.stringify(text)} to ${san}`, () => assert.deepEqual(plain(parse(text)), { kind: 'move', san }));
 }
 
-for (const text of ['', 'hello', 'maybe e2 to e4', 'e two to e nine', 'e two to e four and d two to d four', 'queen', 'knight f3 please', 'e7e8 promote to king', 'the score is e four', 'a'.repeat(200)]) {
-  test(`ignores unsupported speech ${JSON.stringify(text.slice(0, 50))}`, () => assert.equal(parse(text), null));
+for (const [text, kind] of [['stop', 'stop'], ['stop listening', 'stop'], ['pause', 'stop'], ['help', 'help']]) {
+  test(`preserves ${text} control`, () => assert.deepEqual(plain(parse(text)), { kind }));
 }
 
-test('does not choose between two knights', () => {
-  const result = resolve(parse('knight f3'), [{ piece: 'n', from: 'g1', to: 'f3' }, { piece: 'n', from: 'd2', to: 'f3' }]);
-  assert.match(result.error, /g1 or d2/);
+for (const text of [
+  '', 'hello', 'e2e4', 'e two to e four', 'g1f3', 'e7e8q', 'knight to f three', 'rook a to e7',
+  'echo four', 'knight foxtrot three', 'castle kingside', 'pawn e4', 'e8 promote to queen',
+  'move e4', 'please Nf3', 'maybe e4', 'e4 e5', 'Nf3 and Nc6', 'e4,e5', 'queen', 'knight f3 please',
+  'Ne9', 'e0', 'Nf', 'xe4', 'e8K', 'e8=K', 'e4=Q', 'Nf3=Q', 'Nf3++', 'Nf3!', 'O-O-O-O', 'a'.repeat(200),
+]) {
+  test(`rejects unsupported notation ${JSON.stringify(text.slice(0, 50))}`, () => assert.equal(parse(text), null));
+}
+
+const move = (san, from, to, extra = {}) => ({ san, from, to, ...extra });
+
+test('requires native SAN disambiguation rather than picking a knight', () => {
+  const moves = [move('Ngf3', 'g1', 'f3'), move('Ndf3', 'd2', 'f3')];
+  const result = resolve(parse('Nf3'), moves);
   assert.equal(result.move, undefined);
+  assert.match(result.error, /Ngf3 or Ndf3/);
+  assert.equal(resolve(parse('knight g f three'), moves).move.from, 'g1');
 });
 
-test('explicit source resolves ambiguous moves and honors the piece name', () => {
-  const moves = [{ piece: 'n', from: 'g1', to: 'f3' }, { piece: 'n', from: 'd2', to: 'f3' }];
-  assert.equal(resolve(parse('g one to f three'), moves).move.from, 'g1');
-  assert.equal(resolve(parse('rook g one to f three'), moves).move, undefined);
+test('requires minimal native disambiguation and allows full-square SAN only when needed', () => {
+  assert.equal(resolve(parse('Ng1f3'), [move('Nf3', 'g1', 'f3')]).move, undefined);
+  assert.equal(resolve(parse('Ng1f3'), [move('Ng1f3', 'g1', 'f3')]).move.from, 'g1');
+  assert.equal(resolve(parse('R1e2'), [move('R1e2', 'e1', 'e2'), move('R3e2', 'e3', 'e2')]).move.from, 'e1');
 });
 
-test('rejects moves absent from native legal moves, including pinned pieces', () => {
-  assert.equal(resolve(parse('knight f3'), [{ piece: 'n', from: 'd2', to: 'e4' }]).move, undefined);
+test('rejects moves absent from native legal SAN, including pinned pieces', () => {
+  assert.equal(resolve(parse('Nf3'), [move('Ne4', 'd2', 'e4')]).move, undefined);
 });
 
-test('uses file and rank disambiguation', () => {
-  const moves = [{ piece: 'r', from: 'a1', to: 'e1' }, { piece: 'r', from: 'h1', to: 'e1' }];
-  assert.equal(resolve(parse('rook alpha to echo one'), moves).move.from, 'a1');
-  assert.equal(resolve(parse('rook one to echo one'), moves).move, undefined);
+test('requires capture notation and never turns a quiet move into a capture', () => {
+  const capture = [move('Qxh7', 'h1', 'h7')];
+  assert.equal(resolve(parse('Qh7'), capture).move, undefined);
+  assert.equal(resolve(parse('Qxh7'), capture).move.from, 'h1');
+  assert.equal(resolve(parse('Qxh7'), [move('Qh7', 'h1', 'h7')]).move, undefined);
 });
 
-test('supports default queen promotion and explicit underpromotion', () => {
-  const moves = ['q', 'r', 'b', 'n'].map(promotion => ({ piece: 'p', from: 'e7', to: 'e8', promotion }));
-  assert.equal(resolve(parse('e7e8'), moves).move.promotion, 'q');
-  assert.equal(resolve(parse('e7e8n'), moves).move.promotion, 'n');
-  assert.equal(resolve(parse('e7e8n'), []).move, undefined);
+test('distinguishes bishop B from pawn file b', () => {
+  const moves = [move('bxc5', 'b4', 'c5'), move('Bxc5', 'g1', 'c5')];
+  assert.equal(resolve(parse('bxc5'), moves).move.from, 'b4');
+  assert.equal(resolve(parse('Bxc5'), moves).move.from, 'g1');
+  assert.equal(resolve(parse('bishop takes c five'), moves).move.from, 'g1');
 });
 
-test('castles for either side using only legal moves', () => {
-  const moves = [{ piece: 'k', from: 'e8', to: 'g8' }, { piece: 'k', from: 'e8', to: 'c8' }];
-  assert.equal(resolve(parse('castle kingside'), moves).move.to, 'g8');
-  assert.equal(resolve(parse('castle queenside'), moves).move.to, 'c8');
+test('supports native en passant SAN without guessing from an empty destination', () => {
+  const moves = [move('exd6', 'e5', 'd6')];
+  assert.equal(resolve(parse('e takes d six'), moves).move.from, 'e5');
+  assert.equal(resolve(parse('d6'), moves).move, undefined);
 });
 
-test('deduplicates repeated legal moves', () => {
-  const move = { piece: 'n', from: 'g1', to: 'f3' };
-  assert.equal(resolve(parse('knight f3'), [move, move]).move.from, 'g1');
+test('requires explicit queen promotion and supports underpromotion', () => {
+  const moves = ['Q', 'R', 'B', 'N'].map(piece => move('e8=' + piece, 'e7', 'e8', { promotion: piece.toLowerCase() }));
+  assert.equal(resolve(parse('e8'), moves).move, undefined);
+  assert.equal(resolve(parse('e8=Q'), moves).move.promotion, 'q');
+  assert.equal(resolve(parse('e8=N'), moves).move.promotion, 'n');
+});
+
+test('matches castling SAN for either color', () => {
+  const moves = [move('O-O', 'e8', 'g8'), move('O-O-O', 'e8', 'c8')];
+  assert.equal(resolve(parse('O O'), moves).move.to, 'g8');
+  assert.equal(resolve(parse('O-O-O'), moves).move.to, 'c8');
+});
+
+test('permits omitted check or mate, but validates supplied suffixes', () => {
+  assert.equal(resolve(parse('Qh7'), [move('Qh7+', 'h1', 'h7')]).move.to, 'h7');
+  assert.equal(resolve(parse('Qh7+'), [move('Qh7+', 'h1', 'h7')]).move.to, 'h7');
+  assert.equal(resolve(parse('Qh7#'), [move('Qh7+', 'h1', 'h7')]).move, undefined);
+  assert.equal(resolve(parse('Qh7+'), [move('Qh7', 'h1', 'h7')]).move, undefined);
+  assert.equal(resolve(parse('Qh7'), [move('Qh7#', 'h1', 'h7')]).move.to, 'h7');
+  assert.equal(resolve(parse('Qh7#'), [move('Qh7#', 'h1', 'h7')]).move.to, 'h7');
+});
+
+test('deduplicates repeated native moves', () => {
+  const native = move('Nf3', 'g1', 'f3');
+  assert.equal(resolve(parse('Nf3'), [native, native]).move.from, 'g1');
+});
+
+test('rejects conflicting native SAN and does not invent missing SAN', () => {
+  assert.equal(resolve(parse('Nf3'), [move('Nf3', 'g1', 'f3'), move('Nf3', 'd2', 'f3')]).move, undefined);
+  assert.match(resolve(parse('Nf3'), [{ from: 'g1', to: 'f3' }]).error, /does not provide standard move notation/);
+  assert.match(resolve(null, []).error, /Use standard notation/);
 });

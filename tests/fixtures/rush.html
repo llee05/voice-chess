@@ -21,7 +21,7 @@
   window.fixture = {
     fen: '4k3/8/8/8/8/8/3N4/4K1N1 w - - 0 1',
     player: 1, mode: 'puzzle', animating: false, enabled: true, submitted: [], reject: false, throwAfterMove: false,
-    moves: [{ from: 'g1', to: 'f3' }, { from: 'd2', to: 'f3' }, { from: 'e1', to: 'f1' }],
+    moves: [{ from: 'g1', to: 'f3', san: 'Ngf3' }, { from: 'd2', to: 'f3', san: 'Ndf3' }, { from: 'e1', to: 'f1', san: 'Kf1' }],
   };
   const symbols = { p: 'P', n: 'N', b: 'B', r: 'R', q: 'Q', k: 'K' };
   function readPieces(fen) {

@@ -43,11 +43,11 @@
 ## Move handling
 
 - Only final recognition results may submit moves. Interim results are for display.
-- Parse supported grammar deliberately; reject unsupported speech and multiple moves in one utterance. Preserve coordinate commands, phonetic files, piece destinations, disambiguation, castling, and promotions.
-- Select from the board's own legal moves. Do not implement a second rules engine or infer legality from piece movement geometry.
-- Never pick between ambiguous source pieces. Ask for a source square, file, or rank and leave the board untouched.
+- Require standard algebraic notation (SAN) for moves: `e4`, `Nf3`, `Qxh7`, `Ngf3`, `O-O`, `e8=Q`. Spoken piece names, ranks, and notation symbols may normalize to SAN (e.g. “knight f three” → `Nf3`). Reject source/destination commands, NATO files, extra filler, and multiple moves in one utterance.
+- Match the board's own legal SAN, including capture markers, required disambiguation, and explicit promotion. Check/mate suffixes may be omitted; when supplied they must match. Do not implement a second rules engine or infer legality from piece movement geometry.
+- Never pick between ambiguous source pieces. Show the matching disambiguated SAN choices and leave the board untouched.
 - Confirm the board instance and FEN still match the snapshot immediately before submission. Block moves on idle, disabled, animating, finished, or opponent-turn positions.
-- Submit through the board's ordinary input handling with `userGenerated: true`. Preserve the native promotion representation; queen is the default when promotion is unspecified.
+- Submit through the board's ordinary input handling with `userGenerated: true`. Preserve the native promotion representation; require a promotion piece in the requested SAN, including for queen promotion.
 - Prevent duplicate submissions and never automatically replay a rejected move. Some board versions throw after accepting input, so an exception alone does not justify retrying.
 - A legal move may be the wrong puzzle answer. Chess.com determines puzzle correctness; do not present legal-move validation as solution validation.
 

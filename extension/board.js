@@ -47,8 +47,9 @@ const VoiceChessBoard = (() => {
     const rawMoves = game.getLegalMoves();
     if (!Array.isArray(rawMoves)) throw new Error('This board version is not supported.');
     const moves = rawMoves.filter(move => squarePattern.test(move.from) && squarePattern.test(move.to) && pieces.get(move.from)?.color === turn)
-      .map(move => ({ from: move.from, to: move.to, piece: pieces.get(move.from).type, ...(move.promotion ? { promotion: String(move.promotion).toLowerCase() } : {}), raw: move }));
+      .map(move => ({ from: move.from, to: move.to, piece: pieces.get(move.from).type, san: move.san, ...(move.promotion ? { promotion: String(move.promotion).toLowerCase() } : {}), raw: move }));
     if (!moves.length) throw new Error('No moves available. Start the next puzzle.');
+    if (moves.some(move => typeof move.san !== 'string' || !move.san)) throw new Error('This board version does not provide standard move notation.');
     return { element, game, fen, moves };
   }
 

@@ -35,17 +35,38 @@ const path = require('node:path');
     await speak('knight f three', false);
     assert.equal((await submitted()).length, 0);
     await speak('knight f three');
-    assert.match(await status.textContent(), /Which piece/);
+    assert.match(await status.textContent(), /Ngf3 or Ndf3/);
     assert.equal((await submitted()).length, 0);
+    await speak('e2e4');
     await speak('g one to f three');
+    assert.match(await status.textContent(), /Use standard notation/);
+    assert.equal((await submitted()).length, 0);
+    await speak('knight g f three');
     assert.equal((await submitted()).length, 1);
     assert.equal((await submitted())[0].userGenerated, true);
-    await speak('g one to f three');
+    assert.equal(await status.textContent(), 'Sent Ngf3');
+    await speak('Ngf3');
     assert.equal((await submitted()).length, 1);
     await page.waitForTimeout(650);
     await speak('stop');
     assert.equal(await mic.getAttribute('aria-pressed'), 'false');
-    console.log('✓ Final results, ambiguity, coordinates, duplicate protection, voice stop');
+    console.log('✓ Spoken SAN, disambiguation, coordinate rejection, duplicate protection, voice stop');
+
+    await reset({ fen: '4k3/8/8/8/8/8/4P3/4K3 w - - 0 1', moves: [{ from: 'e2', to: 'e4', san: 'e4' }] });
+    await mic.click();
+    await speak('e four');
+    assert.equal((await submitted())[0].to, 'e4');
+    assert.equal(await status.textContent(), 'Sent e4');
+    console.log('✓ Pawn SAN without a source square');
+
+    await reset({ fen: '4k3/7p/8/8/8/8/8/4K2Q w - - 0 1', moves: [{ from: 'h1', to: 'h7', san: 'Qxh7+' }] });
+    await mic.click();
+    await speak('Qh7');
+    assert.equal((await submitted()).length, 0);
+    await speak('queen takes h seven');
+    assert.equal((await submitted())[0].to, 'h7');
+    assert.equal(await status.textContent(), 'Sent Qxh7+');
+    console.log('✓ Capture marker required; omitted check suffix allowed');
 
     await reset({ mode: 'passive-observing' });
     await mic.click();
@@ -53,32 +74,34 @@ const path = require('node:path');
     assert.equal(await page.evaluate(() => window.recognizers?.length ?? 0), 0);
     console.log('✓ Idle board does not start the microphone');
 
-    await reset({ fen: '4k1n1/8/8/8/8/8/8/4K3 b - - 0 1', player: 2, moves: [{ from: 'g8', to: 'f6' }] });
+    await reset({ fen: '4k1n1/8/8/8/8/8/8/4K3 b - - 0 1', player: 2, moves: [{ from: 'g8', to: 'f6', san: 'Nf6' }] });
     await mic.click();
-    await speak('knight foxtrot six');
+    await speak('Nf6');
     assert.equal((await submitted())[0].from, 'g8');
     console.log('✓ Black-side Puzzle Rush');
 
-    await reset({ fen: '4k3/P7/8/8/8/8/8/4K3 w - - 0 1', moves: ['Q', 'N'].map(promotion => ({ from: 'a7', to: 'a8', promotion })) });
+    await reset({ fen: '4k3/P7/8/8/8/8/8/4K3 w - - 0 1', moves: ['Q', 'N'].map(promotion => ({ from: 'a7', to: 'a8', promotion, san: 'a8=' + promotion })) });
     await mic.click();
-    await speak('alpha seven to alpha eight promote to knight');
+    await speak('a8');
+    assert.equal((await submitted()).length, 0);
+    await speak('a eight equals knight');
     assert.equal((await submitted())[0].promotion, 'N');
     console.log('✓ Native promotion handling');
 
     await reset({ reject: true });
     await mic.click();
-    await speak('g1f3');
+    await speak('Ngf3');
     await page.waitForTimeout(650);
     assert.match(await status.textContent(), /Board rejected/);
-    await speak('g1f3');
+    await speak('Ngf3');
     assert.equal((await submitted()).length, 1);
     console.log('✓ Failed submission does not replay');
 
     await reset({ throwAfterMove: true });
     await mic.click();
-    await speak('g1f3');
+    await speak('Ngf3');
     await page.waitForTimeout(650);
-    assert.match(await status.textContent(), /Sent g1/);
+    assert.match(await status.textContent(), /Sent Ngf3/);
     assert.equal((await submitted()).length, 1);
     console.log('✓ Board exception after accepting input');
 
