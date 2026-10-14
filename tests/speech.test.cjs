@@ -49,6 +49,35 @@ test('does not replay previous final results', () => {
   assert.deepEqual(f.commands, ['knight f3']);
 });
 
+test('delivers each final result index once, even when an event is repeated', () => {
+  const f = fixture();
+  f.session.start();
+  f.emit('Nf3');
+  f.emit('Nf3');
+  assert.deepEqual(f.commands, ['Nf3']);
+});
+
+test('consumes additional finals in a batch without replaying them later', () => {
+  const f = fixture();
+  f.session.start();
+  const results = ['Nf3', 'e4'].map(transcript => Object.assign([{ transcript }], { isFinal: true }));
+  f.instances[0].onresult({ resultIndex: 0, results });
+  f.instances[0].onresult({ resultIndex: 1, results });
+  assert.deepEqual(f.commands, ['Nf3']);
+  f.emit('e5', true, 2, results);
+  assert.deepEqual(f.commands, ['Nf3', 'e5']);
+});
+
+test('result indexes restart for a new recognition object', () => {
+  const f = fixture();
+  f.session.start();
+  f.emit('Nf3');
+  f.instances[0].onend();
+  f.runTasks();
+  f.emit('e4');
+  assert.deepEqual(f.commands, ['Nf3', 'e4']);
+});
+
 test('reconnects after normal disconnection', () => {
   const f = fixture();
   f.session.start();
@@ -103,6 +132,30 @@ test('silence is recoverable but repeated disconnects eventually stop', () => {
   for (let index = 0; index < 5; index++) { f.instances.at(-1).onend(); f.runTasks(); }
   assert.equal(f.session.active, false);
   assert.equal(f.instances.length, 5);
+});
+
+test('interim-only results do not allow endless reconnection', () => {
+  const f = fixture();
+  f.session.start();
+  for (let index = 0; index < 5; index++) {
+    f.emit('knight', false);
+    f.instances.at(-1).onend();
+    f.runTasks();
+  }
+  assert.equal(f.session.active, false);
+  assert.equal(f.instances.length, 5);
+  assert.deepEqual(f.commands, []);
+});
+
+test('a new final result resets the disconnect budget', () => {
+  const f = fixture();
+  f.session.start();
+  for (let index = 0; index < 4; index++) { f.instances.at(-1).onend(); f.runTasks(); }
+  f.emit('Nf3');
+  f.instances.at(-1).onend();
+  f.runTasks();
+  assert.equal(f.session.active, true);
+  assert.equal(f.instances.length, 6);
 });
 
 test('reports an unsupported speech API', () => {

@@ -35,22 +35,31 @@ const VoiceChessSpeech = class {
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
+    let finalizedThrough = -1;
     recognition.onstart = () => {
       if (this.active && this.recognition === recognition) this.onState(true, 'Listening');
     };
     recognition.onresult = event => {
       if (!this.active || this.recognition !== recognition) return;
-      this.failures = 0;
-      for (let index = event.resultIndex; index < event.results.length; index++) {
+      let command = null;
+      let interim = null;
+      for (let index = Math.max(event.resultIndex, finalizedThrough + 1); index < event.results.length; index++) {
         const result = event.results[index];
         const text = result[0].transcript.trim();
-        this.onTranscript(text);
         if (result.isFinal) {
-          this.onCommand(text);
-          // Submit only one command from a recognition batch; later results could
-          // belong to the previous position or contain a second accidental move.
-          break;
-        }
+          finalizedThrough = index;
+          if (command === null && text) command = text;
+        } else interim = text;
+      }
+      // Final results are immutable and accumulate for this recognition object.
+      // Consume the entire batch before delivering one command, so ignored finals
+      // cannot be replayed against a later puzzle position.
+      if (command !== null) {
+        this.failures = 0;
+        this.onTranscript(command);
+        this.onCommand(command);
+      } else if (interim !== null) {
+        this.onTranscript(interim);
       }
     };
     recognition.onerror = event => {

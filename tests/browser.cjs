@@ -60,6 +60,20 @@ const path = require('node:path');
     assert.equal(await status.textContent(), 'Sent e4');
     console.log('✓ Pawn SAN without a source square');
 
+    await reset();
+    await mic.click();
+    await speak('Ngf3');
+    await page.waitForTimeout(650);
+    await page.evaluate(() => {
+      fixture.fen = '4k3/8/8/8/8/8/3N4/4K1N1 w - - 1 2';
+      const recognition = window.recognizers.at(-1);
+      recognition.onresult({ resultIndex: 0, results: recognition.results });
+    });
+    assert.equal((await submitted()).length, 1);
+    await speak('Ngf3');
+    assert.equal((await submitted()).length, 2);
+    console.log('✓ Repeated final events cannot replay against a new puzzle position');
+
     await reset({ fen: '4k3/7p/8/8/8/8/8/4K2Q w - - 0 1', moves: [{ from: 'h1', to: 'h7', san: 'Qxh7+' }] });
     await mic.click();
     await speak('Qh7');

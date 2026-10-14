@@ -77,13 +77,17 @@
     },
   };
   window.SpeechRecognition = class {
-    constructor() { window.recognizers ??= []; window.recognizers.push(this); }
+    constructor() { this.results = []; window.recognizers ??= []; window.recognizers.push(this); }
     start() { this.onstart?.(); }
     abort() { this.aborted = true; this.onend?.(); }
   };
   window.speak = (text, final = true) => {
+    const recognition = window.recognizers.at(-1);
+    const resultIndex = recognition.results.findIndex(result => !result.isFinal);
+    const index = resultIndex < 0 ? recognition.results.length : resultIndex;
     const result = [{ transcript: text }]; result.isFinal = final;
-    window.recognizers.at(-1).onresult({ resultIndex: 0, results: [result] });
+    recognition.results.splice(index, recognition.results.length - index, result);
+    recognition.onresult({ resultIndex: index, results: recognition.results });
   };
   render();
 </script>

@@ -36,7 +36,7 @@ Source/destination commands (`e2e4`, “e two to e four”), NATO files, phrases
 
 Only final recognition results trigger moves. The move must match the board's own legal SAN. Immediately before submission, the extension rechecks the board instance, position, and availability of the requested move. When more than one piece could match, the extension displays disambiguated notation such as `Ngf3` or `Ndf3`; it never picks one for you. A legal move can still be an incorrect puzzle answer: Chess.com decides that. The extension does not read puzzle solutions or select moves.
 
-The mic stays on between puzzles and reconnects after a normal speech-service timeout. It switches off when you hide the tab, navigate away from Puzzle Rush, click the button, or say “stop”. Return to the tab and click the mic to resume. A rejected submission is not automatically replayed.
+The mic stays on between puzzles and reconnects after a normal speech-service timeout, with a short delay and a limit of four consecutive restarts without a new final result. Repeated final events are ignored; if one event contains several final utterances, only the first is used and the others are discarded. It switches off when you hide the tab, navigate away from Puzzle Rush, click the button, or say “stop”. Return to the tab and click the mic to resume. A rejected submission is not automatically replayed.
 
 ## Privacy and troubleshooting
 
