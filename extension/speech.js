@@ -23,7 +23,7 @@ const VoiceChessSpeech = class {
     this.listen();
   }
 
-  listen() {
+  listen(preserveStatus = false) {
     if (!this.active) return;
     let recognition;
     try { recognition = new this.Recognition(); } catch {
@@ -32,12 +32,24 @@ const VoiceChessSpeech = class {
     }
     this.recognition = recognition;
     recognition.lang = 'en-US';
-    recognition.continuous = true;
+    recognition.continuous = false;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
     let finalizedThrough = -1;
+    let finishing = false;
+    let receivedFinal = false;
     recognition.onstart = () => {
-      if (this.active && this.recognition === recognition) this.onState(true, 'Listening');
+      if (this.active && this.recognition === recognition && !preserveStatus) this.onState(true, 'Listening');
+    };
+    recognition.onspeechend = () => {
+      if (!this.active || this.recognition !== recognition || finishing) return;
+      finishing = true;
+      if (!receivedFinal) this.onState(true, 'Recognizing…');
+      // stop() asks the browser to finalize captured speech; it does not submit
+      // the interim transcript. Keep the mic control armed for the next utterance.
+      try { recognition.stop(); } catch {
+        this.stop('Could not finish speech. Click the microphone to retry.');
+      }
     };
     recognition.onresult = event => {
       if (!this.active || this.recognition !== recognition) return;
@@ -55,6 +67,7 @@ const VoiceChessSpeech = class {
       // Consume the entire batch before delivering one command, so ignored finals
       // cannot be replayed against a later puzzle position.
       if (command !== null) {
+        receivedFinal = true;
         this.failures = 0;
         this.onTranscript(command);
         this.onCommand(command);
@@ -77,15 +90,15 @@ const VoiceChessSpeech = class {
     recognition.onend = () => {
       if (!this.active || this.recognition !== recognition) return;
       this.recognition = null;
-      if (++this.failures >= 5) {
+      if (!receivedFinal && ++this.failures >= 5) {
         this.stop('Speech keeps disconnecting. Click the microphone to retry.');
         return;
       }
-      this.onState(true, 'Reconnecting microphone…');
+      if (!receivedFinal) this.onState(true, 'Reconnecting microphone…');
       this.restart = this.timers.setTimeout(() => {
         this.restart = null;
-        this.listen();
-      }, 300);
+        this.listen(receivedFinal);
+      }, receivedFinal ? 50 : 300);
     };
     try {
       recognition.start();

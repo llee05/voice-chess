@@ -10,10 +10,11 @@ function fixture(Recognition) {
   class FakeRecognition {
     constructor() { instances.push(this); }
     start() { this.onstart(); }
+    stop() { this.stopCalls = (this.stopCalls ?? 0) + 1; }
     abort() { this.aborted = true; this.onend(); }
   }
   const timers = {
-    setTimeout(callback) { const id = Symbol(); tasks.set(id, callback); return id; },
+    setTimeout(callback, delay) { const id = Symbol(); tasks.set(id, Object.assign(callback, { delay })); return id; },
     clearTimeout(id) { tasks.delete(id); },
   };
   const session = new Speech({
@@ -38,7 +39,66 @@ test('starts only once and uses final results for moves', () => {
   f.emit('e two to e four');
   assert.deepEqual(f.commands, ['e two to e four']);
   assert.equal(f.instances.length, 1);
-  assert.equal(f.instances[0].continuous, true);
+  assert.equal(f.instances[0].continuous, false);
+});
+
+test('requests finalization when speech ends, but submits only the final result', () => {
+  const f = fixture();
+  f.session.start();
+  f.emit('knight f three', false);
+  assert.equal(f.instances[0].stopCalls, undefined);
+  f.instances[0].onspeechend();
+  f.instances[0].onspeechend();
+  assert.equal(f.instances[0].stopCalls, 1);
+  assert.deepEqual(f.commands, []);
+  assert.equal(f.session.active, true);
+  f.emit('knight f three');
+  assert.deepEqual(f.commands, ['knight f three']);
+});
+
+test('rearms promptly after an utterance without overwriting the command status', () => {
+  const f = fixture();
+  f.session.start();
+  f.emit('Nf3');
+  const stateCount = f.states.length;
+  f.instances[0].onend();
+  assert.equal([...f.tasks.values()][0].delay, 50);
+  f.runTasks();
+  assert.equal(f.instances.length, 2);
+  assert.equal(f.states.length, stateCount);
+  assert.equal(f.session.failures, 0);
+});
+
+test('late speech-end events cannot finalize an earlier recognition object', () => {
+  const f = fixture();
+  f.session.start();
+  const old = f.instances[0];
+  f.session.stop();
+  f.session.start();
+  old.onspeechend();
+  assert.equal(old.stopCalls, undefined);
+  assert.equal(f.instances[1].stopCalls, undefined);
+});
+
+test('stop cancels rearming after a completed utterance', () => {
+  const f = fixture();
+  f.session.start();
+  f.emit('Nf3');
+  f.instances[0].onend();
+  f.session.stop();
+  f.runTasks();
+  assert.equal(f.session.active, false);
+  assert.equal(f.instances.length, 1);
+});
+
+test('a failed finalization stops listening without a retry loop', () => {
+  const f = fixture();
+  f.session.start();
+  f.instances[0].stop = () => { throw new Error('Unavailable'); };
+  f.instances[0].onspeechend();
+  assert.equal(f.session.active, false);
+  assert.equal(f.instances[0].aborted, true);
+  assert.equal(f.tasks.size, 0);
 });
 
 test('does not replay previous final results', () => {
@@ -83,6 +143,7 @@ test('reconnects after normal disconnection', () => {
   f.session.start();
   f.instances[0].onend();
   assert.equal(f.tasks.size, 1);
+  assert.equal([...f.tasks.values()][0].delay, 300);
   f.runTasks();
   assert.equal(f.instances.length, 2);
   assert.equal(f.session.active, true);

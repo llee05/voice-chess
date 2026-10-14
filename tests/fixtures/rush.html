@@ -80,6 +80,7 @@
   window.SpeechRecognition = class {
     constructor() { this.results = []; window.recognizers ??= []; window.recognizers.push(this); }
     start() { this.onstart?.(); }
+    stop() { this.stopCalls = (this.stopCalls ?? 0) + 1; }
     abort() { this.aborted = true; this.onend?.(); }
   };
   window.speak = (text, final = true) => {

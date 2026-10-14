@@ -63,6 +63,22 @@ const path = require('node:path');
 
     await reset();
     await mic.click();
+    await speak('Ngf3', false);
+    assert.equal((await submitted()).length, 0);
+    await page.evaluate(() => window.recognizers.at(-1).onspeechend());
+    assert.equal(await page.evaluate(() => window.recognizers.at(-1).stopCalls), 1);
+    assert.equal((await submitted()).length, 0);
+    assert.equal(await status.textContent(), 'Recognizing…');
+    await speak('Ngf3');
+    assert.equal((await submitted()).length, 1);
+    await page.evaluate(() => window.recognizers.at(-1).onend());
+    await page.waitForFunction(() => window.recognizers.length === 2);
+    assert.equal(await mic.getAttribute('aria-pressed'), 'true');
+    assert.equal(await status.textContent(), 'Sent Ngf3');
+    console.log('✓ Speech-end finalization waits for final SAN and rearms without losing status');
+
+    await reset();
+    await mic.click();
     await speak('Ngf3');
     await page.waitForTimeout(650);
     await page.evaluate(() => {
