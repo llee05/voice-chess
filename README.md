@@ -32,7 +32,7 @@ The extension is ready to load directly; installing Node or running npm is unnec
 
 Moves must use SAN, following the [PGN notation specification](https://www.saremba.de/chessgml/standards/pgn/pgn-complete.htm). Spoken piece names and numbers normalize to that notation. Captures require `x`, ambiguous pieces require the appropriate file or rank, and promotions require `=Q`, `=R`, `=B`, or `=N`. Check (`+`) and mate (`#`) are optional; if supplied, they must be correct. In compact notation, uppercase `Bxd5` is a bishop capture and lowercase `bxd5` is a pawn capture; say “bishop takes d five” to identify the bishop clearly.
 
-Source/destination commands (`e2e4`, “e two to e four”), NATO files, phrases such as “knight to f three”, and multiple moves in one utterance are rejected. Use one SAN move at a time. “stop” and “help” remain voice controls.
+Source/destination commands (`e2e4`, “e two to e four”), NATO files, phrases such as “knight to f three”, and multiple moves in one utterance are rejected. Use one SAN move at a time. For a rank-disambiguated bishop move, use uppercase `B` or say “bishop” (`B4e5`, “bishop four e five”); lowercase `b4e5` is rejected as a coordinate command. “stop” and “help” remain voice controls.
 
 Only final recognition results trigger moves. The move must match the board's own legal SAN. When more than one piece could match, the extension displays disambiguated notation such as `Ngf3` or `Ndf3`; it never picks one for you. A legal move can still be an incorrect puzzle answer: Chess.com decides that. The extension does not read puzzle solutions or select moves.
 

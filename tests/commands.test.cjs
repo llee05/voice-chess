@@ -11,7 +11,8 @@ for (const [text, san] of [
   ['exd5', 'exd5'], ['e takes d five', 'exd5'],
   ['bxc5', 'bxc5'], ['Bxc5', 'Bxc5'], ['bishop takes c five', 'Bxc5'], ['B X c five', 'Bxc5'],
   ['Ngf3', 'Ngf3'], ['knight g f three', 'Ngf3'], ['R1e2', 'R1e2'], ['rook one e two', 'R1e2'],
-  ['Rae2', 'Rae2'], ['Ng1f3', 'Ng1f3'], ['O-O', 'O-O'], ['0-0', 'O-O'], ['O O', 'O-O'],
+  ['Rae2', 'Rae2'], ['Ng1f3', 'Ng1f3'], ['B4e5', 'B4e5'], ['bishop four e five', 'B4e5'],
+  ['O-O', 'O-O'], ['0-0', 'O-O'], ['O O', 'O-O'],
   ['O-O-O', 'O-O-O'], ['zero zero zero', 'O-O-O'],
   ['e8=Q', 'e8=Q'], ['e eight equals queen', 'e8=Q'], ['e8=n', 'e8=N'], ['e eight equals knight', 'e8=N'],
   ['axb8=N+', 'axb8=N+'], ['a takes b eight equals knight check', 'axb8=N+'], ['e1=R', 'e1=R'],
@@ -25,9 +26,10 @@ for (const [text, kind] of [['stop', 'stop'], ['stop listening', 'stop'], ['paus
 }
 
 for (const text of [
-  '', 'hello', 'e2e4', 'e two to e four', 'g1f3', 'e7e8q', 'knight to f three', 'rook a to e7',
+  '', 'hello', 'e2e4', 'e two to e four', 'g1f3', 'b1c3', 'b one c three', 'e7e8q', 'knight to f three', 'rook a to e7',
   'echo four', 'knight foxtrot three', 'castle kingside', 'pawn e4', 'e8 promote to queen',
-  'move e4', 'please Nf3', 'maybe e4', 'e4 e5', 'Nf3 and Nc6', 'e4,e5', 'queen', 'knight f3 please',
+  'move e4', 'please Nf3', 'maybe e4', 'e4 e5', 'b4 e5', 'b four e five', 'b1 c3+',
+  'Nf3 and Nc6', 'e4,e5', 'queen', 'knight f3 please',
   'Ne9', 'e0', 'Nf', 'xe4', 'e8K', 'e8=K', 'e4=Q', 'Nf3=Q', 'Nf3++', 'Nf3!', 'O-O-O-O', 'a'.repeat(200),
 ]) {
   test(`rejects unsupported notation ${JSON.stringify(text.slice(0, 50))}`, () => assert.equal(parse(text), null));

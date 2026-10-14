@@ -41,6 +41,9 @@ const VoiceChessCommands = (() => {
     if (/^help$/i.test(text)) return { kind: 'help' };
     let notation = text.replace(/check mate/gi, 'checkmate').split(/\s+/)
       .map(token => words[token.toLowerCase()] ?? token).join('');
+    // A lowercase b followed by two squares/ranks is a coordinate command or
+    // multiple pawn moves, not an instruction to move a rank-disambiguated bishop.
+    if (/^b[1-8]x?[a-h][1-8][+#]?$/i.test(notation) && notation[0] === 'b') return null;
     // Dictating O-O produces separate O's rather than spoken hyphens.
     notation = notation.replace(/^([o0]{2,3})([+#]?)$/i, (_, castles, suffix) => Array.from(castles, () => 'O').join('-') + suffix);
     const move = readSan(notation);
