@@ -50,7 +50,7 @@ The extension declares no additional API permissions and injects scripts only on
 - **Wrong transcript:** speak one SAN move, using piece names and clear file letters and numbers. Recognition accuracy and latency depend on your browser, microphone, and connection.
 - **Board does not change:** ensure a rush is running, wait for animations, and use the mouse if the site rejects the request. Toggle the mic to retry the same command deliberately.
 
-Chess.com's board API is undocumented and may change. The adapter checks its expected methods and stops with a message when they are unavailable. Its integration approach is informed by the public [Chess Helper board adapter](https://github.com/everyonesdesign/Chess-Helper/blob/master/app/src/chessboard/component-chessboard/index.ts). The extension was loaded on the live logged-out Puzzle Rush page and its board methods were checked. Live signed-in Puzzle Rush and real microphone recognition still need a manual check; automated tests use a simulated board API and speech events, not a Chess.com account.
+Chess.com's board API is undocumented and may change. The adapter checks its expected methods and move data, including consistent promotion choices, and stops with a message when they are unavailable. Its integration approach is informed by the public [Chess Helper board adapter](https://github.com/everyonesdesign/Chess-Helper/blob/master/app/src/chessboard/component-chessboard/index.ts). The extension was loaded on the live logged-out Puzzle Rush page and its board methods were checked. Live signed-in Puzzle Rush and real microphone recognition still need a manual check; automated tests use a simulated board API and speech events, not a Chess.com account.
 
 ## Development
 

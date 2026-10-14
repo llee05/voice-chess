@@ -96,6 +96,13 @@ const path = require('node:path');
     assert.equal((await submitted())[0].from, 'g8');
     console.log('✓ Black-side Puzzle Rush');
 
+    await reset({ fen: '4k3/P7/8/8/8/8/8/4K3 w - - 0 1', moves: [{ from: 'a7', to: 'a8', promotion: 'Q', san: 'a8=N' }] });
+    await mic.click();
+    assert.match(await status.textContent(), /consistent promotion choices/);
+    assert.equal(await mic.getAttribute('aria-pressed'), 'false');
+    assert.equal((await submitted()).length, 0);
+    console.log('✓ Inconsistent promotion data leaves the board untouched');
+
     await reset({ fen: '4k3/P7/8/8/8/8/8/4K3 w - - 0 1', moves: ['Q', 'N'].map(promotion => ({ from: 'a7', to: 'a8', promotion, san: 'a8=' + promotion })) });
     await mic.click();
     await speak('a8');

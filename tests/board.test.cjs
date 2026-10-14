@@ -160,6 +160,20 @@ test('rejects a mutated promotion instead of silently changing the requested pie
   assert.equal(f.submissions.length, 0);
 });
 
+test('rejects missing or inconsistent native promotion choices', () => {
+  for (const move of [
+    { from: 'a7', to: 'a8', san: 'a8=N' },
+    { from: 'a7', to: 'a8', san: 'a8=N', promotion: 'Q' },
+    { from: 'a7', to: 'a8', san: 'a8', promotion: 'N' },
+  ]) {
+    const f = fixture();
+    f.setFen('4k3/P7/8/8/8/8/8/4K3 w - - 0 1');
+    f.game.getLegalMoves = () => [move];
+    assert.throws(() => board.snapshot(f.doc), /consistent promotion choices/);
+    assert.equal(f.submissions.length, 0);
+  }
+});
+
 test('fails clearly for malformed native move collections', () => {
   for (const moves of [null, {}, [null], [42], [{ from: 'z1', to: 'f3', san: 'Nf3' }]]) {
     const f = fixture();

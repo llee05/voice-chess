@@ -56,6 +56,9 @@ const VoiceChessBoard = (() => {
       .map(move => ({ from: move.from, to: move.to, piece: pieces.get(move.from).type, san: move.san, ...(move.promotion ? { promotion: String(move.promotion).toLowerCase() } : {}), raw: move }));
     if (!moves.length) throw new Error('No moves available. Start the next puzzle.');
     if (moves.some(move => typeof move.san !== 'string' || !move.san)) throw new Error('This board version does not provide standard move notation.');
+    if (moves.some(move => move.promotion !== /=([QRBN])[+#]?$/.exec(move.san)?.[1].toLowerCase())) {
+      throw new Error('This board version does not provide consistent promotion choices.');
+    }
     return { element, game, fen, moves };
   }
 
