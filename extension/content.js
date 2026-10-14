@@ -44,7 +44,8 @@
         <p class="privacy">Your browser’s speech service may process audio online. Voice Chess saves no audio or transcripts.</p>
       </div></details>
     </section>`;
-  document.body.append(host);
+  // Stay outside Chess.com's body containers, which may clip or transform children.
+  document.documentElement.append(host);
   const panel = root.querySelector('.panel');
   const status = root.querySelector('.status');
   const transcript = root.querySelector('.transcript');
@@ -122,37 +123,41 @@
   window.addEventListener('pagehide', () => speech.stop());
   // Chess.com can navigate without loading a new document. Hide and stop outside Rush.
   function placeControl() {
+    if (host.hidden) return;
+    // Keep page-flow placement while scrolling to it. Switching to fixed would
+    // shrink the document and jump back to the top before the panel is reached.
+    if (host.hasAttribute('data-inline') && window.scrollY > 0) return;
     const board = VoiceChessBoard.findElement();
     const bounds = board?.getBoundingClientRect();
     const width = panel.getBoundingClientRect().width;
-    let left;
-    let top;
-    // Use document coordinates to choose a stable placement while scrolling.
-    if (bounds && window.innerHeight - (bounds.bottom + window.scrollY) >= 124) {
-      left = Math.max(12, Math.min(bounds.left, window.innerWidth - width - 12));
-      top = Math.max(12, bounds.bottom + 12);
-      // Measure without removing an inline panel, which would shrink the page
-      // and reset its scroll position before the collision check finishes.
-      const height = panel.scrollHeight + 2;
-      const documentTop = bounds.bottom + window.scrollY + 12;
-      const obstructsInput = Array.from(document.querySelectorAll('button, a[href], input, select, textarea, [role="button"]')).some(element => {
-        const rect = element.getBoundingClientRect();
-        const rectTop = rect.top + window.scrollY;
-        const belowBoard = rectTop < documentTop + height && rectTop + rect.height > documentTop;
-        const visible = rect.top < top + Math.min(height, window.innerHeight - top - 12) && rect.bottom > top;
-        return rect.width > 0 && rect.height > 0 && rect.left < left + width && rect.right > left && (belowBoard || visible);
-      });
-      if (obstructsInput) left = undefined;
+    const height = Math.min(panel.scrollHeight + 2, window.innerHeight - 24);
+    const right = window.innerWidth - width - 12;
+    const bottom = window.innerHeight - height - 12;
+    const obstacles = Array.from(document.querySelectorAll('button, a[href], input, select, textarea, [role="button"]'))
+      .map(element => element.getBoundingClientRect()).filter(rect => rect.width > 0 && rect.height > 0);
+    if (bounds) obstacles.push(bounds);
+    const candidates = [];
+    // Prefer space below the board, allowing the examples to scroll if needed.
+    const below = bounds ? window.innerHeight - bounds.bottom - 24 : 0;
+    if (below >= Math.min(height, 124)) {
+      candidates.push({ left: Math.max(12, Math.min(bounds.left, right)), top: bounds.bottom + 12, height: Math.min(height, below) });
     }
-    host.toggleAttribute('data-inline', Boolean(bounds) && left === undefined);
-    if (left !== undefined) {
-      host.style.left = `${left}px`;
-      host.style.top = `${top}px`;
+    // A fixed corner can remain reachable when the page itself cannot scroll.
+    for (const [left, top] of [[right, bottom], [12, bottom], [right, 12], [12, 12]]) {
+      candidates.push({ left, top, height });
+    }
+    const placement = candidates.find(candidate => candidate.left >= 12 && candidate.top >= 12 &&
+      candidate.left + width <= window.innerWidth - 12 && candidate.top + candidate.height <= window.innerHeight - 12 &&
+      !obstacles.some(rect => rect.left < candidate.left + width && rect.right > candidate.left && rect.top < candidate.top + candidate.height && rect.bottom > candidate.top));
+    host.toggleAttribute('data-inline', Boolean(bounds) && !placement);
+    if (placement) {
+      host.style.left = `${placement.left}px`;
+      host.style.top = `${placement.top}px`;
       host.style.right = 'auto';
       host.style.bottom = 'auto';
-      host.style.setProperty('--panel-height', `${window.innerHeight - top - 12}px`);
+      host.style.setProperty('--panel-height', `${placement.height}px`);
     }
-    if (left === undefined) {
+    if (!placement) {
       host.style.left = '';
       host.style.top = '';
       host.style.right = '';

@@ -236,6 +236,38 @@ const path = require('node:path');
     const desktopRushControl = await page.locator('.rush-control').boundingBox();
     assert.ok(desktopShort.y >= desktopRushControl.y + desktopRushControl.height, 'Short desktop layouts must keep native Rush controls accessible');
     console.log('✓ Keyboard controls, narrow viewports, and board clearance on short screens');
+
+    await page.setViewportSize({ width: 1325, height: 667 });
+    await reset();
+    await page.evaluate(() => {
+      // Rush can use a fixed page container that clips children added after it.
+      document.body.style.cssText = 'position: fixed; inset: 0; overflow: hidden; transform: translateX(24px);';
+      window.dispatchEvent(new Event('resize'));
+    });
+    async function assertControlVisible() {
+      const bounds = await page.locator('#voice-chess-control').boundingBox();
+      assert.ok(bounds.x >= 12 && bounds.x + bounds.width <= 1313, 'Control must retain its horizontal viewport insets');
+      assert.ok(bounds.y >= 12 && bounds.y + bounds.height <= 655, 'Control must be visible without scrolling a clipped page');
+      const board = await page.locator('wc-chess-board').boundingBox();
+      const native = await page.locator('.rush-control').boundingBox();
+      const overlaps = other => bounds.x < other.x + other.width && bounds.x + bounds.width > other.x && bounds.y < other.y + other.height && bounds.y + bounds.height > other.y;
+      assert.equal(overlaps(board), false, 'Control must keep board input accessible');
+      assert.equal(overlaps(native), false, 'Control must keep Rush settings accessible');
+    }
+    await assertControlVisible();
+    await mic.click();
+    await speak('G6', false);
+    await assertControlVisible();
+    await speak('help');
+    await page.waitForFunction(() => {
+      const bounds = document.querySelector('#voice-chess-control').getBoundingClientRect();
+      return bounds.top >= 12 && bounds.bottom <= innerHeight - 12;
+    });
+    await assertControlVisible();
+    await page.waitForTimeout(550);
+    await assertControlVisible();
+    await page.screenshot({ path: path.resolve(__dirname, '../artifacts/voice-chess-clipped-page.png') });
+    console.log('✓ Clipped page containers keep the mic, transcript, and expanded examples on screen');
     assert.deepEqual(errors, []);
     console.log('Browser checks passed. Screenshot: artifacts/voice-chess.png');
   } finally {
