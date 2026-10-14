@@ -39,6 +39,7 @@ const path = require('node:path');
     assert.equal((await submitted()).length, 0);
     await speak('e2e4');
     await speak('g one to f three');
+    await speak('b four e five');
     assert.match(await status.textContent(), /Use standard notation/);
     assert.equal((await submitted()).length, 0);
     await speak('knight g f three');
@@ -87,6 +88,27 @@ const path = require('node:path');
     await speak('a eight equals knight');
     assert.equal((await submitted())[0].promotion, 'N');
     console.log('✓ Native promotion handling');
+
+    await reset();
+    await mic.click();
+    await page.evaluate(() => {
+      const game = document.querySelector('wc-chess-board').game;
+      const getMoves = game.getLegalMoves;
+      let reads = 0;
+      game.getLegalMoves = () => {
+        if (++reads === 2) {
+          fixture.fen = fixture.fen.replace('0 1', '1 2');
+          game.getLegalMoves = getMoves;
+        }
+        return getMoves();
+      };
+    });
+    await speak('Ngf3');
+    assert.match(await status.textContent(), /puzzle changed/);
+    assert.equal((await submitted()).length, 0);
+    await speak('Ngf3');
+    assert.equal((await submitted()).length, 1);
+    console.log('✓ Stale validation reports the cause and permits a fresh command');
 
     await reset({ reject: true });
     await mic.click();

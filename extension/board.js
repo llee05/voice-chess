@@ -45,8 +45,10 @@ const VoiceChessBoard = (() => {
     if (player !== turn) throw new Error('Wait for your turn.');
     const pieces = piecesFromFen(fen);
     const rawMoves = game.getLegalMoves();
-    if (!Array.isArray(rawMoves)) throw new Error('This board version is not supported.');
-    const moves = rawMoves.filter(move => squarePattern.test(move.from) && squarePattern.test(move.to) && pieces.get(move.from)?.color === turn)
+    if (!Array.isArray(rawMoves) || rawMoves.some(move => !move || typeof move.from !== 'string' || typeof move.to !== 'string' || !squarePattern.test(move.from) || !squarePattern.test(move.to))) {
+      throw new Error('This board version is not supported.');
+    }
+    const moves = rawMoves.filter(move => pieces.get(move.from)?.color === turn)
       .map(move => ({ from: move.from, to: move.to, piece: pieces.get(move.from).type, san: move.san, ...(move.promotion ? { promotion: String(move.promotion).toLowerCase() } : {}), raw: move }));
     if (!moves.length) throw new Error('No moves available. Start the next puzzle.');
     if (moves.some(move => typeof move.san !== 'string' || !move.san)) throw new Error('This board version does not provide standard move notation.');
@@ -55,9 +57,18 @@ const VoiceChessBoard = (() => {
 
   function play(position, move, doc = document) {
     const current = snapshot(doc);
-    if (current.game !== position.game || current.fen !== position.fen) throw new Error('The puzzle changed. Say your move again.');
+    if (current.element !== position.element || current.game !== position.game || current.fen !== position.fen) throw new Error('The puzzle changed. Say your move again.');
+    const available = position.moves.includes(move) && current.moves.find(candidate => candidate.from === move.from && candidate.to === move.to && candidate.promotion === move.promotion && candidate.san === move.san);
+    if (!available) throw new Error('That move is no longer available. Say your move again.');
+    if (current.element.game !== position.game || current.game.getFEN() !== position.fen) throw new Error('The puzzle changed. Say your move again.');
     // userGenerated sends the move through the puzzle's ordinary input handling.
-    current.game.move({ from: move.from, to: move.to, ...(move.promotion ? { promotion: move.raw?.promotion ?? move.promotion } : {}), animate: true, userGenerated: true });
+    try {
+      current.game.move({ from: available.from, to: available.to, ...(available.promotion ? { promotion: available.raw.promotion } : {}), animate: true, userGenerated: true });
+    } catch {
+      // An exception here may happen after dispatch. Report the attempt separately
+      // from validation failures, so the caller never retries accepted input.
+      return { uncertain: true };
+    }
   }
 
   return Object.freeze({ snapshot, play, piecesFromFen });

@@ -83,19 +83,19 @@
         const key = `${position.fen}:${move.from}${move.to}${move.promotion ?? ''}`;
         if (lastSubmission === key) { status.textContent = 'Already sent. Wait for the board to change.'; return; }
         busy = true;
-        lastSubmission = key;
         const version = sessionVersion;
-        let submissionError = false;
-        try { VoiceChessBoard.play(position, move); } catch { submissionError = true; }
-        status.textContent = `Sent ${move.san}`;
+        const submission = VoiceChessBoard.play(position, move);
+        lastSubmission = key;
+        status.textContent = submission?.uncertain ? 'Could not confirm the move. Checking board…' : `Sent ${move.san}`;
         // Some board versions throw after emitting a user move. Never resend it.
         pendingCheck = setTimeout(() => {
           busy = false;
           if (version !== sessionVersion) return;
           try {
-            if (!position.element.isConnected || position.game.getFEN() !== position.fen) return;
+            if (!position.element.isConnected) return;
+            if (position.game.getFEN() !== position.fen) { status.textContent = `Sent ${move.san}`; return; }
           } catch { return; /* Board destroyed during a puzzle transition. */ }
-          status.textContent = submissionError ? 'Board rejected the move. Use the mouse, then retry.' : 'Board did not change. Check the puzzle is running.';
+          status.textContent = submission?.uncertain ? 'Board rejected the move. Use the mouse, then retry.' : 'Board did not change. Check the puzzle is running.';
         }, 600);
       } catch (error) {
         busy = false;

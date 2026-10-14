@@ -49,6 +49,39 @@ test('rejects a replaced board, even if its FEN is the same', () => {
   assert.throws(() => board.play(position, position.moves[0], f.doc), /puzzle changed/);
 });
 
+test('rejects a replaced element that reuses the same game object', () => {
+  const f = fixture();
+  const position = board.snapshot(f.doc);
+  f.doc.querySelectorAll = () => [{ ...f.element }];
+  assert.throws(() => board.play(position, position.moves[0], f.doc), /puzzle changed/);
+  assert.equal(f.submissions.length, 0);
+});
+
+test('rechecks legal moves when the FEN has not changed', () => {
+  const f = fixture();
+  const position = board.snapshot(f.doc);
+  f.game.getLegalMoves = () => [{ from: 'g1', to: 'h3', san: 'Nh3' }];
+  assert.throws(() => board.play(position, position.moves[0], f.doc), /move is no longer available/);
+  assert.equal(f.submissions.length, 0);
+});
+
+test('checks the FEN again after reading current legal moves', () => {
+  const f = fixture();
+  const position = board.snapshot(f.doc);
+  const getMoves = f.game.getLegalMoves;
+  f.game.getLegalMoves = () => { f.setFen(initial.replace('0 1', '1 2')); return getMoves(); };
+  assert.throws(() => board.play(position, position.moves[0], f.doc), /puzzle changed/);
+  assert.equal(f.submissions.length, 0);
+});
+
+test('reports uncertain submission after a board exception without retrying', () => {
+  const f = fixture();
+  const position = board.snapshot(f.doc);
+  f.game.move = value => { f.submissions.push(value); throw new Error('Thrown after dispatch'); };
+  assert.equal(board.play(position, position.moves[0], f.doc).uncertain, true);
+  assert.equal(f.submissions.length, 1);
+});
+
 test('blocks opponent turns', () => {
   const f = fixture();
   f.setFen(initial.replace(' w ', ' b '));
@@ -102,6 +135,26 @@ test('preserves native promotion casing', () => {
   assert.equal(position.moves[0].promotion, 'n');
   board.play(position, position.moves[0], f.doc);
   assert.equal(f.submissions[0].promotion, 'N');
+});
+
+test('rejects a mutated promotion instead of silently changing the requested piece', () => {
+  const f = fixture();
+  f.setFen('4k3/P7/8/8/8/8/8/4K3 w - - 0 1');
+  const raw = { from: 'a7', to: 'a8', promotion: 'N', san: 'a8=N' };
+  f.game.getLegalMoves = () => [raw];
+  const position = board.snapshot(f.doc);
+  raw.promotion = 'Q';
+  raw.san = 'a8=Q';
+  assert.throws(() => board.play(position, position.moves[0], f.doc), /move is no longer available/);
+  assert.equal(f.submissions.length, 0);
+});
+
+test('fails clearly for malformed native move collections', () => {
+  for (const moves of [null, {}, [null], [42], [{ from: 'z1', to: 'f3', san: 'Nf3' }]]) {
+    const f = fixture();
+    f.game.getLegalMoves = () => moves;
+    assert.throws(() => board.snapshot(f.doc), /board version is not supported/);
+  }
 });
 
 test('fails clearly when native legal moves lack SAN', () => {

@@ -34,7 +34,7 @@ Moves must use SAN, following the [PGN notation specification](https://www.sarem
 
 Source/destination commands (`e2e4`, “e two to e four”), NATO files, phrases such as “knight to f three”, and multiple moves in one utterance are rejected. Use one SAN move at a time. For a rank-disambiguated bishop move, use uppercase `B` or say “bishop” (`B4e5`, “bishop four e five”); lowercase `b4e5` is rejected as a coordinate command. “stop” and “help” remain voice controls.
 
-Only final recognition results trigger moves. The move must match the board's own legal SAN. When more than one piece could match, the extension displays disambiguated notation such as `Ngf3` or `Ndf3`; it never picks one for you. A legal move can still be an incorrect puzzle answer: Chess.com decides that. The extension does not read puzzle solutions or select moves.
+Only final recognition results trigger moves. The move must match the board's own legal SAN. Immediately before submission, the extension rechecks the board instance, position, and availability of the requested move. When more than one piece could match, the extension displays disambiguated notation such as `Ngf3` or `Ndf3`; it never picks one for you. A legal move can still be an incorrect puzzle answer: Chess.com decides that. The extension does not read puzzle solutions or select moves.
 
 The mic stays on between puzzles and reconnects after a normal speech-service timeout. It switches off when you hide the tab, navigate away from Puzzle Rush, click the button, or say “stop”. Return to the tab and click the mic to resume. A rejected submission is not automatically replayed.
 
