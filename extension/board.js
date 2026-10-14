@@ -25,11 +25,15 @@ const VoiceChessBoard = (() => {
     return null;
   }
 
-  function snapshot(doc = document) {
-    const element = Array.from(doc.querySelectorAll('wc-chess-board, chess-board')).find(board => {
+  function findElement(doc = document) {
+    return Array.from(doc.querySelectorAll('wc-chess-board, chess-board')).find(board => {
       const bounds = board.getBoundingClientRect();
       return bounds.width > 0 && bounds.height > 0 && board.game;
     });
+  }
+
+  function snapshot(doc = document) {
+    const element = findElement(doc);
     const game = element?.game;
     if (!game || typeof game.getFEN !== 'function' || typeof game.getLegalMoves !== 'function' || typeof game.move !== 'function') {
       throw new Error('Start a Puzzle Rush to connect the board.');
@@ -71,5 +75,5 @@ const VoiceChessBoard = (() => {
     }
   }
 
-  return Object.freeze({ snapshot, play, piecesFromFen });
+  return Object.freeze({ snapshot, play, piecesFromFen, findElement });
 })();

@@ -25,6 +25,17 @@ test('reads types from actual FEN and excludes the other side', () => {
   assert.equal(position.moves[0].san, 'Nf3');
 });
 
+test('uses the visible initialized board when hidden boards precede it', () => {
+  const f = fixture();
+  f.doc.querySelectorAll = () => [
+    { game: f.game, getBoundingClientRect: () => ({ width: 0, height: 0 }) },
+    { getBoundingClientRect: () => ({ width: 400, height: 400 }) },
+    f.element,
+  ];
+  assert.equal(board.findElement(f.doc), f.element);
+  assert.equal(board.snapshot(f.doc).element, f.element);
+});
+
 test('submits one user move with animation', () => {
   const f = fixture();
   const position = board.snapshot(f.doc);

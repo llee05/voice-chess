@@ -10,7 +10,7 @@ Vanilla JavaScript, HTML, CSS, and Manifest V3. No framework, build step, backen
 2. In **Google Chrome**, open `chrome://extensions` and turn on **Developer mode**.
 3. Click **Load unpacked** and select this repository's **`extension/`** folder.
 4. Open [Puzzle Rush](https://www.chess.com/puzzles/rush), or reload it if it is already open.
-5. Start a rush. Click the Voice Chess microphone below the board (or in the bottom-right corner when space is tight) and allow microphone access for Chess.com.
+5. Start a rush. Click the Voice Chess microphone below or beside the board and allow microphone access for Chess.com. On a small screen with no room around the board, scroll down to the control at the end of the page.
 
 The extension is ready to load directly; installing Node or running npm is unnecessary for normal use. Google Chrome is the primary target. Other Chromium browsers can load it, but their speech service may be unavailable. Firefox is not supported.
 
@@ -63,7 +63,7 @@ npm run check
 npm run test:browser
 ```
 
-Set `CHROMIUM_PATH` if Chromium is not at `/usr/bin/chromium`. Playwright is a development-only dependency; browser tests load the actual unpacked extension on an intercepted Chess.com URL. They cover command delivery, ambiguity, duplicate suppression, black-side puzzles, underpromotion, microphone denial, failed submissions, navigation, and hidden-tab cleanup. The visual screenshot is saved to `artifacts/voice-chess.png` and clearly labels the local test board.
+Set `CHROMIUM_PATH` if Chromium is not at `/usr/bin/chromium`. Playwright is a development-only dependency; browser tests load the actual unpacked extension on an intercepted Chess.com URL. They cover command delivery, ambiguity, duplicate speech events, stale positions, black-side puzzles, underpromotion, microphone denial, failed submissions, navigation, hidden-tab cleanup, keyboard access, and narrow or short viewports. The visual screenshot is saved to `artifacts/voice-chess.png` and clearly labels the local test board.
 
 ```text
 extension/

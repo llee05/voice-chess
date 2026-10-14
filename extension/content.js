@@ -8,8 +8,9 @@
     <style>
       :host { all: initial; position: fixed; right: 20px; bottom: 20px; z-index: 2147483647; color-scheme: dark; }
       :host([hidden]) { display: none !important; }
+      :host([data-inline]) { position: static; display: block; width: fit-content; margin: 12px; }
       * { box-sizing: border-box; }
-      .panel { width: 284px; max-height: var(--panel-height, calc(100vh - 40px)); overflow-y: auto; border: 1px solid #454642; border-radius: 14px; background: #242522; color: #f0f1eb; box-shadow: 0 6px 24px #0003; font: 13px/1.5 system-ui, sans-serif; scrollbar-width: thin; }
+      .panel { width: min(284px, calc(100vw - 24px)); max-height: var(--panel-height, calc(100vh - 24px)); overflow-y: auto; border: 1px solid #454642; border-radius: 14px; background: #242522; color: #f0f1eb; box-shadow: 0 6px 24px #0003; font: 13px/1.5 system-ui, sans-serif; scrollbar-width: thin; }
       .main { display: flex; align-items: center; gap: 12px; padding: 14px; }
       .copy { flex: 1; min-width: 0; }
       .title { font-size: 13px; font-weight: 650; letter-spacing: .1px; }
@@ -27,7 +28,7 @@
       .help p { margin: 0 0 8px; }
       .examples { color: #f0f1eb; }
       .privacy { color: #969c8c; font-size: 11px; }
-      @media (max-width: 400px) { :host { right: 12px; bottom: 12px; } .panel { width: 260px; } }
+      @media (max-width: 400px) { :host { right: 12px; bottom: 12px; } .panel { width: min(260px, calc(100vw - 24px)); } }
     </style>
     <section class="panel" aria-label="Voice Chess">
       <div class="main">
@@ -43,7 +44,8 @@
         <p class="privacy">Your browser’s speech service may process audio online. Voice Chess saves no audio or transcripts.</p>
       </div></details>
     </section>`;
-  document.documentElement.append(host);
+  document.body.append(host);
+  const panel = root.querySelector('.panel');
   const status = root.querySelector('.status');
   const transcript = root.querySelector('.transcript');
   const toggle = root.querySelector('button');
@@ -64,6 +66,7 @@
       if (!active) {
         sessionVersion++;
         clearTimeout(pendingCheck);
+        pendingCheck = null;
         busy = false;
       }
     },
@@ -89,8 +92,9 @@
         status.textContent = submission?.uncertain ? 'Could not confirm the move. Checking board…' : `Sent ${move.san}`;
         // Some board versions throw after emitting a user move. Never resend it.
         pendingCheck = setTimeout(() => {
-          busy = false;
           if (version !== sessionVersion) return;
+          pendingCheck = null;
+          busy = false;
           try {
             if (!position.element.isConnected) return;
             if (position.game.getFEN() !== position.fen) { status.textContent = `Sent ${move.san}`; return; }
@@ -106,7 +110,7 @@
 
   toggle.addEventListener('click', () => {
     if (speech.active) { speech.stop(); return; }
-    if (!isRush()) return;
+    if (!isRush() || document.hidden) return;
     try { VoiceChessBoard.snapshot(); } catch (error) { status.textContent = error.message; return; }
     transcript.textContent = '';
     lastSubmission = null;
@@ -118,15 +122,29 @@
   window.addEventListener('pagehide', () => speech.stop());
   // Chess.com can navigate without loading a new document. Hide and stop outside Rush.
   function placeControl() {
-    const board = document.querySelector('wc-chess-board, chess-board');
+    const board = VoiceChessBoard.findElement();
     const bounds = board?.getBoundingClientRect();
-    // Use the space below the board so the control doesn't cover Rush's buttons.
-    if (bounds?.width > 0 && window.innerHeight - bounds.bottom >= 124) {
-      host.style.left = `${Math.max(12, Math.min(bounds.left, window.innerWidth - 296))}px`;
-      host.style.top = `${bounds.bottom + 12}px`;
+    const width = panel.getBoundingClientRect().width;
+    let left;
+    let top;
+    // Use document coordinates to choose a stable placement while scrolling.
+    if (bounds && window.innerHeight - (bounds.bottom + window.scrollY) >= 124) {
+      left = bounds.left;
+      top = Math.max(12, bounds.bottom + 12);
+    } else if (bounds && window.innerWidth - bounds.right >= width + 24) {
+      left = bounds.right + 12;
+      top = Math.max(12, Math.min(bounds.top, window.innerHeight - 124));
+    } else if (bounds && bounds.left >= width + 24) {
+      left = bounds.left - width - 12;
+      top = Math.max(12, Math.min(bounds.top, window.innerHeight - 124));
+    }
+    host.toggleAttribute('data-inline', Boolean(bounds) && left === undefined);
+    if (left !== undefined) {
+      host.style.left = `${Math.max(12, Math.min(left, window.innerWidth - width - 12))}px`;
+      host.style.top = `${top}px`;
       host.style.right = 'auto';
       host.style.bottom = 'auto';
-      host.style.setProperty('--panel-height', `${window.innerHeight - bounds.bottom - 24}px`);
+      host.style.setProperty('--panel-height', `${window.innerHeight - top - 12}px`);
     } else {
       host.style.left = '';
       host.style.top = '';
@@ -142,6 +160,8 @@
   }
   checkRoute();
   window.addEventListener('popstate', checkRoute);
+  window.navigation?.addEventListener('currententrychange', checkRoute);
   window.addEventListener('resize', placeControl);
+  window.addEventListener('scroll', placeControl, { passive: true });
   setInterval(checkRoute, 500);
 })();

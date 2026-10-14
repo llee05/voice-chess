@@ -13,7 +13,7 @@
   h1 { font-size: 26px; margin: 0 0 10px; }
   p { color: #b6b2ac; font-size: 14px; line-height: 1.6; }
   .tag { font-size: 11px; letter-spacing: 1px; color: #c4dc97; }
-  @media (max-width: 700px) { main { margin: 24px; display: block; } wc-chess-board { width: 340px; height: 340px; } aside { margin-top: 24px; } }
+  @media (max-width: 700px) { main { margin: 24px; display: block; } wc-chess-board { width: min(340px, calc(100vw - 48px)); height: auto; aspect-ratio: 1; } aside { margin-top: 24px; } }
 </style>
 <main><wc-chess-board></wc-chess-board><aside><div class="tag">LOCAL TEST FIXTURE</div><h1>Puzzle Rush</h1><p>White to move.<br>The extension runs against a simulated board API.</p></aside></main>
 <script>
