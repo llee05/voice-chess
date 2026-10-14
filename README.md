@@ -37,6 +37,8 @@ Only final recognition results trigger moves. The move must match the board's ow
 
 Recognition handles one utterance at a time and [requests finalization when the browser detects the end of speech](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition/stop). The status shows “Recognizing…” while the final transcript is pending. Only a final result can submit a move; recognition rearms after 50 ms when an utterance completes. Actual recognition latency still depends on the browser's speech service.
 
+Final moves submit immediately when the board is ready. Once the position changes, the next final command can submit without a fixed pause between moves. An unchanged position remains protected against overlapping submissions.
+
 The mic stays armed between moves and puzzles. A speech-service disconnection without a final result reconnects after 300 ms, with a limit of four consecutive restarts without a new final result. Repeated final events are ignored; if one event contains several final utterances, only the first is used and the others are discarded. It switches off when you hide the tab, navigate away from Puzzle Rush, click the button, or say “stop”. Return to the tab and click the mic to resume. A rejected submission is not automatically replayed.
 
 ## Privacy and troubleshooting

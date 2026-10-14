@@ -41,7 +41,8 @@
   const status = root.querySelector('.status');
   const transcript = root.querySelector('.transcript');
   const toggle = root.querySelector('button');
-  let busy = false;
+  let waitingPosition = null;
+  let submitting = false;
   let lastSubmission = null;
   let sessionVersion = 0;
   let pendingCheck = null;
@@ -58,7 +59,7 @@
         sessionVersion++;
         clearTimeout(pendingCheck);
         pendingCheck = null;
-        busy = false;
+        waitingPosition = null;
       }
     },
     onTranscript(text) { transcript.textContent = text; },
@@ -66,25 +67,39 @@
       if (!isRush() || document.hidden) return;
       const command = VoiceChessCommands.parse(text);
       if (command?.kind === 'stop') { speech.stop(); return; }
-      if (busy) return;
+      if (submitting) return;
       if (!command) { status.textContent = 'Use standard notation: e4 or Nf3 (“knight f three”).'; return; }
       try {
         const position = VoiceChessBoard.snapshot();
+        // Keep an unchanged position locked, but accept the next final command
+        // as soon as the board has advanced instead of waiting for the watchdog.
+        if (waitingPosition && waitingPosition.element === position.element && waitingPosition.game === position.game && waitingPosition.fen === position.fen) return;
+        if (waitingPosition) {
+          clearTimeout(pendingCheck);
+          pendingCheck = null;
+          waitingPosition = null;
+        }
         const result = VoiceChessCommands.resolve(command, position.moves);
         if (result.error) { status.textContent = result.error; return; }
         const move = result.move;
         const key = `${position.fen}:${move.from}${move.to}${move.promotion ?? ''}`;
         if (lastSubmission === key) { status.textContent = 'Already sent. Wait for the board to change.'; return; }
-        busy = true;
+        waitingPosition = position;
         const version = sessionVersion;
-        const submission = VoiceChessBoard.play(position, move);
+        let submission;
+        submitting = true;
+        try { submission = VoiceChessBoard.play(position, move); } catch (error) {
+          waitingPosition = null;
+          throw error;
+        } finally { submitting = false; }
         lastSubmission = key;
+        if (version !== sessionVersion) return;
         status.textContent = submission?.uncertain ? 'Could not confirm the move. Checking board…' : `Sent ${move.san}`;
         // Some board versions throw after emitting a user move. Never resend it.
         pendingCheck = setTimeout(() => {
           if (version !== sessionVersion) return;
           pendingCheck = null;
-          busy = false;
+          waitingPosition = null;
           try {
             if (!position.element.isConnected) return;
             if (position.game.getFEN() !== position.fen) { status.textContent = `Sent ${move.san}`; return; }
@@ -92,7 +107,6 @@
           status.textContent = submission?.uncertain ? 'Board rejected the move. Use the mouse, then retry.' : 'Board did not change. Check the puzzle is running.';
         }, 600);
       } catch (error) {
-        busy = false;
         status.textContent = error.message || 'Could not read this board.';
       }
     },

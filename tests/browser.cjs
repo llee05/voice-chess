@@ -79,6 +79,23 @@ const path = require('node:path');
 
     await reset();
     await mic.click();
+    const rapid = await page.evaluate(() => {
+      window.speak('Ngf3');
+      // Simulate Rush finishing its reply and making the next move available,
+      // without advancing timers between these final recognition results.
+      fixture.fen = '4k3/8/8/8/8/5N2/3N4/4K3 w - - 1 2';
+      fixture.moves = [{ from: 'f3', to: 'g5', san: 'Ng5' }];
+      window.speak('Ng5');
+      return fixture.submitted;
+    });
+    assert.equal(rapid.length, 2, 'A changed board must accept the next final move without a fixed cooldown');
+    assert.equal(rapid[1].to, 'g5');
+    await page.waitForTimeout(650);
+    assert.equal(await status.textContent(), 'Sent Ng5');
+    console.log('✓ Final moves submit immediately after the board changes');
+
+    await reset();
+    await mic.click();
     await speak('Ngf3');
     await page.waitForTimeout(650);
     await page.evaluate(() => {
@@ -151,6 +168,8 @@ const path = require('node:path');
     await reset({ reject: true });
     await mic.click();
     await speak('Ngf3');
+    await speak('Ndf3');
+    assert.equal((await submitted()).length, 1, 'Unchanged positions must keep the in-flight submission locked');
     await page.waitForTimeout(650);
     assert.match(await status.textContent(), /Board rejected/);
     await speak('Ngf3');
