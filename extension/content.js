@@ -129,23 +129,30 @@
     let top;
     // Use document coordinates to choose a stable placement while scrolling.
     if (bounds && window.innerHeight - (bounds.bottom + window.scrollY) >= 124) {
-      left = bounds.left;
+      left = Math.max(12, Math.min(bounds.left, window.innerWidth - width - 12));
       top = Math.max(12, bounds.bottom + 12);
-    } else if (bounds && window.innerWidth - bounds.right >= width + 24) {
-      left = bounds.right + 12;
-      top = Math.max(12, Math.min(bounds.top, window.innerHeight - 124));
-    } else if (bounds && bounds.left >= width + 24) {
-      left = bounds.left - width - 12;
-      top = Math.max(12, Math.min(bounds.top, window.innerHeight - 124));
+      // Measure without removing an inline panel, which would shrink the page
+      // and reset its scroll position before the collision check finishes.
+      const height = panel.scrollHeight + 2;
+      const documentTop = bounds.bottom + window.scrollY + 12;
+      const obstructsInput = Array.from(document.querySelectorAll('button, a[href], input, select, textarea, [role="button"]')).some(element => {
+        const rect = element.getBoundingClientRect();
+        const rectTop = rect.top + window.scrollY;
+        const belowBoard = rectTop < documentTop + height && rectTop + rect.height > documentTop;
+        const visible = rect.top < top + Math.min(height, window.innerHeight - top - 12) && rect.bottom > top;
+        return rect.width > 0 && rect.height > 0 && rect.left < left + width && rect.right > left && (belowBoard || visible);
+      });
+      if (obstructsInput) left = undefined;
     }
     host.toggleAttribute('data-inline', Boolean(bounds) && left === undefined);
     if (left !== undefined) {
-      host.style.left = `${Math.max(12, Math.min(left, window.innerWidth - width - 12))}px`;
+      host.style.left = `${left}px`;
       host.style.top = `${top}px`;
       host.style.right = 'auto';
       host.style.bottom = 'auto';
       host.style.setProperty('--panel-height', `${window.innerHeight - top - 12}px`);
-    } else {
+    }
+    if (left === undefined) {
       host.style.left = '';
       host.style.top = '';
       host.style.right = '';
@@ -163,5 +170,7 @@
   window.navigation?.addEventListener('currententrychange', checkRoute);
   window.addEventListener('resize', placeControl);
   window.addEventListener('scroll', placeControl, { passive: true });
+  help.addEventListener('toggle', placeControl);
+  new ResizeObserver(placeControl).observe(panel);
   setInterval(checkRoute, 500);
 })();
