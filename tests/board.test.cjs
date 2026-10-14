@@ -1,0 +1,110 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const { load } = require('./helpers.cjs');
+const board = load('board.js', 'VoiceChessBoard');
+const initial = '4k3/8/8/8/8/8/8/4K1N1 w - - 0 1';
+
+function fixture() {
+  let fen = initial;
+  const submissions = [];
+  const game = {
+    getFEN: () => fen,
+    getPlayingAs: () => 1,
+    getLegalMoves: () => [{ from: 'g1', to: 'f3' }, { from: 'e8', to: 'e7' }],
+    move: value => submissions.push(value),
+  };
+  const element = { game, getBoundingClientRect: () => ({ width: 400, height: 400 }) };
+  const doc = { querySelectorAll: () => [element] };
+  return { game, element, doc, submissions, setFen: value => { fen = value; } };
+}
+
+test('reads types from actual FEN and excludes the other side', () => {
+  const position = board.snapshot(fixture().doc);
+  assert.equal(position.moves.length, 1);
+  assert.equal(position.moves[0].piece, 'n');
+});
+
+test('submits one user move with animation', () => {
+  const f = fixture();
+  const position = board.snapshot(f.doc);
+  board.play(position, position.moves[0], f.doc);
+  assert.equal(f.submissions.length, 1);
+  assert.equal(f.submissions[0].userGenerated, true);
+  assert.equal(f.submissions[0].from, 'g1');
+});
+
+test('rejects a changed position before submitting', () => {
+  const f = fixture();
+  const position = board.snapshot(f.doc);
+  f.setFen(initial.replace('0 1', '1 2'));
+  assert.throws(() => board.play(position, position.moves[0], f.doc), /puzzle changed/);
+  assert.equal(f.submissions.length, 0);
+});
+
+test('rejects a replaced board, even if its FEN is the same', () => {
+  const f = fixture();
+  const position = board.snapshot(f.doc);
+  f.element.game = { ...f.game };
+  assert.throws(() => board.play(position, position.moves[0], f.doc), /puzzle changed/);
+});
+
+test('blocks opponent turns', () => {
+  const f = fixture();
+  f.setFen(initial.replace(' w ', ' b '));
+  assert.throws(() => board.snapshot(f.doc), /your turn/);
+});
+
+test('does not enable the microphone on the idle Puzzle Rush board', () => {
+  const f = fixture();
+  f.game.getMode = () => ({ name: 'passive-observing' });
+  assert.throws(() => board.snapshot(f.doc), /Start a Puzzle Rush/);
+});
+
+test('blocks a finished or unloaded position with no legal moves', () => {
+  const f = fixture();
+  f.game.getLegalMoves = () => [];
+  assert.throws(() => board.snapshot(f.doc), /No moves available/);
+});
+
+test('uses Puzzle Rush orientation when the player API is unavailable', () => {
+  const f = fixture();
+  delete f.game.getPlayingAs;
+  f.game.getOptions = () => ({ flipped: true });
+  f.setFen(initial.replace(' w ', ' b '));
+  assert.equal(board.snapshot(f.doc).moves[0].from, 'e8');
+});
+
+test('blocks moves during animation and when input is disabled', () => {
+  const f = fixture();
+  f.game.isAnimating = () => true;
+  assert.throws(() => board.snapshot(f.doc), /board to be ready/);
+  f.game.isAnimating = () => false;
+  f.game.getOptions = () => ({ enabled: false });
+  assert.throws(() => board.snapshot(f.doc), /board to be ready/);
+});
+
+test('fails clearly when the API or player side is unavailable', () => {
+  assert.throws(() => board.snapshot({ querySelectorAll: () => [] }), /Start a Puzzle Rush/);
+  const f = fixture();
+  delete f.game.getLegalMoves;
+  assert.throws(() => board.snapshot(f.doc), /Start a Puzzle Rush/);
+  f.game.getLegalMoves = () => [];
+  delete f.game.getPlayingAs;
+  assert.throws(() => board.snapshot(f.doc), /puzzle side/);
+});
+
+test('preserves native promotion casing', () => {
+  const f = fixture();
+  f.setFen('4k3/P7/8/8/8/8/8/4K3 w - - 0 1');
+  f.game.getLegalMoves = () => [{ from: 'a7', to: 'a8', promotion: 'N' }];
+  const position = board.snapshot(f.doc);
+  assert.equal(position.moves[0].promotion, 'n');
+  board.play(position, position.moves[0], f.doc);
+  assert.equal(f.submissions[0].promotion, 'N');
+});
+
+test('rejects malformed piece placement', () => {
+  for (const fen of ['8/8/8/8', '9/8/8/8/8/8/8/8', '7/8/8/8/8/8/8/8', 'x7/8/8/8/8/8/8/8']) {
+    assert.throws(() => board.piecesFromFen(fen), /position is unavailable/);
+  }
+});

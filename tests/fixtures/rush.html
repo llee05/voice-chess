@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Puzzle Rush · integration fixture</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #302e2b; color: #efeeec; font-family: system-ui, sans-serif; }
+  main { max-width: 920px; margin: 72px auto; display: flex; gap: 32px; align-items: flex-start; }
+  wc-chess-board { display: grid; grid-template-columns: repeat(8, 1fr); width: 520px; height: 520px; }
+  .square { display: grid; place-items: center; font-size: 36px; font-weight: 700; color: #f8f6eb; background: #769656; text-shadow: 0 1px 2px #000a; }
+  .square.light { background: #eeeed2; }
+  .square.black { color: #242522; text-shadow: 0 1px 1px #fffa; }
+  h1 { font-size: 26px; margin: 0 0 10px; }
+  p { color: #b6b2ac; font-size: 14px; line-height: 1.6; }
+  .tag { font-size: 11px; letter-spacing: 1px; color: #c4dc97; }
+  @media (max-width: 700px) { main { margin: 24px; display: block; } wc-chess-board { width: 340px; height: 340px; } aside { margin-top: 24px; } }
+</style>
+<main><wc-chess-board></wc-chess-board><aside><div class="tag">LOCAL TEST FIXTURE</div><h1>Puzzle Rush</h1><p>White to move.<br>The extension runs against a simulated board API.</p></aside></main>
+<script>
+  const nativeBoard = document.querySelector('wc-chess-board');
+  window.fixture = {
+    fen: '4k3/8/8/8/8/8/3N4/4K1N1 w - - 0 1',
+    player: 1, mode: 'puzzle', animating: false, enabled: true, submitted: [], reject: false, throwAfterMove: false,
+    moves: [{ from: 'g1', to: 'f3' }, { from: 'd2', to: 'f3' }, { from: 'e1', to: 'f1' }],
+  };
+  const symbols = { p: 'P', n: 'N', b: 'B', r: 'R', q: 'Q', k: 'K' };
+  function readPieces(fen) {
+    const pieces = {};
+    fen.split(' ')[0].split('/').forEach((row, rank) => {
+      let file = 0;
+      for (const char of row) {
+        if (/\d/.test(char)) file += Number(char);
+        else pieces[String.fromCharCode(97 + file++) + (8 - rank)] = char;
+      }
+    });
+    return pieces;
+  }
+  function render() {
+    const pieces = readPieces(fixture.fen);
+    nativeBoard.replaceChildren();
+    for (let rank = 8; rank >= 1; rank--) for (let file = 0; file < 8; file++) {
+      const square = String.fromCharCode(97 + file) + rank;
+      const cell = document.createElement('div');
+      const piece = pieces[square];
+      cell.className = 'square' + ((file + rank) % 2 ? ' light' : '') + (piece === piece?.toLowerCase() ? ' black' : '');
+      cell.textContent = piece ? symbols[piece.toLowerCase()] : '';
+      nativeBoard.append(cell);
+    }
+  }
+  nativeBoard.game = {
+    getFEN: () => fixture.fen,
+    getPlayingAs: () => fixture.player,
+    getMode: () => ({ name: fixture.mode }),
+    isAnimating: () => fixture.animating,
+    getOptions: () => ({ enabled: fixture.enabled, flipped: fixture.player === 2 }),
+    getLegalMoves: () => fixture.moves,
+    move(move) {
+      fixture.submitted.push(move);
+      if (fixture.reject) throw new Error('Input disabled');
+      const pieces = readPieces(fixture.fen);
+      const piece = pieces[move.from];
+      pieces[move.to] = move.promotion ? (piece === piece.toUpperCase() ? move.promotion.toUpperCase() : move.promotion.toLowerCase()) : piece;
+      delete pieces[move.from];
+      const rows = [];
+      for (let rank = 8; rank >= 1; rank--) {
+        let row = '', empty = 0;
+        for (let file = 0; file < 8; file++) {
+          const piece = pieces[String.fromCharCode(97 + file) + rank];
+          if (!piece) empty++;
+          else { if (empty) row += empty; empty = 0; row += piece; }
+        }
+        rows.push(row + (empty || ''));
+      }
+      fixture.fen = rows.join('/') + ' ' + (fixture.player === 1 ? 'b' : 'w') + ' - - 0 1';
+      render();
+      if (fixture.throwAfterMove) throw new Error('Thrown after dispatch');
+    },
+  };
+  window.SpeechRecognition = class {
+    constructor() { window.recognizers ??= []; window.recognizers.push(this); }
+    start() { this.onstart?.(); }
+    abort() { this.aborted = true; this.onend?.(); }
+  };
+  window.speak = (text, final = true) => {
+    const result = [{ transcript: text }]; result.isFinal = final;
+    window.recognizers.at(-1).onresult({ resultIndex: 0, results: [result] });
+  };
+  render();
+</script>
+</html>

@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Voice Chess",
+  "version": "1.0.0",
+  "description": "Move pieces with your voice in Chess.com Puzzle Rush.",
+  "minimum_chrome_version": "111",
+  "icons": {
+    "16": "icons/16.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "action": {
+    "default_title": "Voice Chess · Puzzle Rush",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [{
+    "matches": ["https://www.chess.com/puzzles/rush", "https://www.chess.com/puzzles/rush/*", "https://www.chess.com/puzzles/rush?*"],
+    "js": ["commands.js", "board.js", "speech.js", "content.js"],
+    "world": "MAIN",
+    "run_at": "document_idle"
+  }]
+}
