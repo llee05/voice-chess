@@ -18,16 +18,11 @@
       button { display: grid; place-items: center; flex: none; width: 40px; height: 40px; border: 1px solid #505348; border-radius: 50%; background: #34362f; color: #c8cdbb; cursor: pointer; }
       button:hover { background: #43473b; }
       button[aria-pressed="true"] { background: #c4dc97; border-color: #c4dc97; color: #242c18; }
-      button:focus-visible, summary:focus-visible { outline: 2px solid #c4dc97; outline-offset: 4px; }
+      button:focus-visible { outline: 2px solid #c4dc97; outline-offset: 4px; }
       svg { width: 19px; height: 19px; }
       .transcript { margin: 0 14px 12px; color: #dce5ce; font-size: 13px; overflow-wrap: anywhere; }
       .transcript:empty { display: none; }
-      details { border-top: 1px solid #3d3f37; }
-      summary { padding: 9px 14px; color: #aeb2a5; cursor: pointer; font-size: 11px; }
-      .help { padding: 0 14px 13px; color: #bec3b5; font-size: 12px; }
-      .help p { margin: 0 0 8px; }
-      .examples { color: #f0f1eb; }
-      .privacy { color: #969c8c; font-size: 11px; }
+      .privacy { margin: 0; padding: 0 14px 12px; color: #969c8c; font-size: 11px; }
       @media (max-width: 400px) { :host { right: 12px; bottom: 12px; } .panel { width: min(260px, calc(100vw - 24px)); } }
     </style>
     <section class="panel" aria-label="Voice Chess">
@@ -38,11 +33,7 @@
         </button>
       </div>
       <div class="transcript"></div>
-      <details><summary>Standard notation</summary><div class="help">
-        <p class="examples">e4 — “e four”<br>Nf3 — “knight f three”<br>Qxh7 — “queen takes h seven”<br>O-O — “O O”</p>
-        <p>Use N, B, R, Q, K for pieces. Include captures (x), disambiguation (Ngf3), and promotion (e8=Q). Say “stop” to turn the mic off.</p>
-        <p class="privacy">Your browser’s speech service may process audio online. Voice Chess saves no audio or transcripts.</p>
-      </div></details>
+      <p class="privacy">Your browser may process speech online.</p>
     </section>`;
   // Stay outside Chess.com's body containers, which may clip or transform children.
   document.documentElement.append(host);
@@ -50,7 +41,6 @@
   const status = root.querySelector('.status');
   const transcript = root.querySelector('.transcript');
   const toggle = root.querySelector('button');
-  const help = root.querySelector('details');
   let busy = false;
   let lastSubmission = null;
   let sessionVersion = 0;
@@ -76,7 +66,6 @@
       if (!isRush() || document.hidden) return;
       const command = VoiceChessCommands.parse(text);
       if (command?.kind === 'stop') { speech.stop(); return; }
-      if (command?.kind === 'help') { help.open = true; return; }
       if (busy) return;
       if (!command) { status.textContent = 'Use standard notation: e4 or Nf3 (“knight f three”).'; return; }
       try {
@@ -137,7 +126,7 @@
       .map(element => element.getBoundingClientRect()).filter(rect => rect.width > 0 && rect.height > 0);
     if (bounds) obstacles.push(bounds);
     const candidates = [];
-    // Prefer space below the board, allowing the examples to scroll if needed.
+    // Prefer space below the board, allowing long status messages to scroll if needed.
     const below = bounds ? window.innerHeight - bounds.bottom - 24 : 0;
     if (below >= Math.min(height, 124)) {
       candidates.push({ left: Math.max(12, Math.min(bounds.left, right)), top: bounds.bottom + 12, height: Math.min(height, below) });
@@ -175,7 +164,6 @@
   window.navigation?.addEventListener('currententrychange', checkRoute);
   window.addEventListener('resize', placeControl);
   window.addEventListener('scroll', placeControl, { passive: true });
-  help.addEventListener('toggle', placeControl);
   new ResizeObserver(placeControl).observe(panel);
   setInterval(checkRoute, 500);
 })();

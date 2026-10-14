@@ -38,7 +38,6 @@ const VoiceChessCommands = (() => {
     if (typeof transcript !== 'string' || transcript.length > 160) return null;
     const text = transcript.trim().replace(/\.$/, '').trim();
     if (/^(stop|pause|stop listening|pause listening|microphone off)$/i.test(text)) return { kind: 'stop' };
-    if (/^help$/i.test(text)) return { kind: 'help' };
     let notation = text.replace(/check mate/gi, 'checkmate').split(/\s+/)
       .map(token => words[token.toLowerCase()] ?? token).join('');
     // A lowercase b followed by two squares/ranks is a coordinate command or

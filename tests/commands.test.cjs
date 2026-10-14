@@ -21,12 +21,12 @@ for (const [text, san] of [
   test(`normalizes ${JSON.stringify(text)} to ${san}`, () => assert.deepEqual(plain(parse(text)), { kind: 'move', san }));
 }
 
-for (const [text, kind] of [['stop', 'stop'], ['stop listening', 'stop'], ['pause', 'stop'], ['help', 'help']]) {
+for (const [text, kind] of [['stop', 'stop'], ['stop listening', 'stop'], ['pause', 'stop']]) {
   test(`preserves ${text} control`, () => assert.deepEqual(plain(parse(text)), { kind }));
 }
 
 for (const text of [
-  '', 'hello', 'e2e4', 'e two to e four', 'g1f3', 'b1c3', 'b one c three', 'e7e8q', 'knight to f three', 'rook a to e7',
+  '', 'hello', 'help', 'e2e4', 'e two to e four', 'g1f3', 'b1c3', 'b one c three', 'e7e8q', 'knight to f three', 'rook a to e7',
   'echo four', 'knight foxtrot three', 'castle kingside', 'pawn e4', 'e8 promote to queen',
   'move e4', 'please Nf3', 'maybe e4', 'e4 e5', 'b4 e5', 'b four e five', 'b1 c3+',
   'Nf3 and Nc6', 'e4,e5', 'queen', 'knight f3 please',
