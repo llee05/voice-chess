@@ -65,6 +65,8 @@ npm run test:browser
 
 Set `CHROMIUM_PATH` if Chromium is not at `/usr/bin/chromium`. Playwright is a development-only dependency; browser tests load the actual unpacked extension on an intercepted Chess.com URL. They cover command delivery, ambiguity, duplicate speech events, stale positions, black-side puzzles, underpromotion, microphone denial, failed submissions, navigation, hidden-tab cleanup, keyboard access, and narrow or short viewports. The visual screenshot is saved to `artifacts/voice-chess.png` and clearly labels the local test board.
 
+`npm run check` validates Puzzle Rush injection scope, content script order and syntax, permissions, version alignment, and packaged icon dimensions.
+
 ```text
 extension/
   manifest.json   Narrow Puzzle Rush scope, no extra API permissions

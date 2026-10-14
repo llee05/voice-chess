@@ -8,15 +8,16 @@ const path = require('node:path');
   const profile = await fs.mkdtemp(path.join(os.tmpdir(), 'voice-chess-browser-'));
   const extension = path.resolve(__dirname, '../extension');
   const fixture = await fs.readFile(path.join(__dirname, 'fixtures/rush.html'), 'utf8');
-  const context = await chromium.launchPersistentContext(profile, {
-    executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium',
-    headless: true,
-    ignoreDefaultArgs: ['--disable-extensions'],
-    args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`],
-    viewport: { width: 1280, height: 800 },
-  });
+  let context;
   const errors = [];
   try {
+    context = await chromium.launchPersistentContext(profile, {
+      executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium',
+      headless: true,
+      ignoreDefaultArgs: ['--disable-extensions'],
+      args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`],
+      viewport: { width: 1280, height: 800 },
+    });
     await context.route('https://www.chess.com/**', route => route.fulfill({ contentType: 'text/html', body: fixture }));
     const page = await context.newPage();
     page.on('pageerror', error => errors.push(error.message));
@@ -222,7 +223,7 @@ const path = require('node:path');
     assert.deepEqual(errors, []);
     console.log('Browser checks passed. Screenshot: artifacts/voice-chess.png');
   } finally {
-    await context.close();
+    await context?.close();
     await fs.rm(profile, { recursive: true, force: true });
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });
