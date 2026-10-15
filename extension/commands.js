@@ -48,8 +48,11 @@ const VoiceChessCommands = (() => {
 
   function parse(transcript) {
     if (typeof transcript !== 'string' || transcript.length > 160) return null;
-    const text = transcript.trim().replace(/\.$/, '').trim();
+    let text = transcript.trim().replace(/\.$/, '').trim();
     if (/^(stop|pause|stop listening|pause listening|microphone off)$/i.test(text)) return { kind: 'stop' };
+    // Observed recognizer errors: "nothing g5" for "knight takes g5", and
+    // "96" / "ninety-six" for "knight e six". Keep repairs narrowly scoped.
+    text = text.replace(/^nothing\s+/i, 'knight takes ').replace(/^ninety-/i, 'ninety ');
     const castleText = text.toLowerCase().replace(/\s+/g, ' ').replace(/\b(king|queen)[ -]+side\b/g, '$1side');
     const castle = /^(?:castle(?: (kingside|queenside|short|long))?|(kingside|queenside|short|long) castle)(?: ?(checkmate|check mate|check|[+#]))?$/.exec(castleText);
     if (castle) {
@@ -65,7 +68,7 @@ const VoiceChessCommands = (() => {
       const rank = rankHomophones[tokens[index].toLowerCase()];
       if (rank && /[a-h]$/i.test(tokens[index - 1]) && /^(?:=?[qrbn])?[+#]?$/i.test(tokens.slice(index + 1).join(''))) tokens[index] = rank;
     }
-    let notation = tokens.join('');
+    let notation = tokens.join('').replace(/^(?:9|ninety)([1-8])([+#]?)$/i, 'Ne$1$2');
     // A lowercase b followed by two squares/ranks is a coordinate command or
     // multiple pawn moves, not an instruction to move a rank-disambiguated bishop.
     if (/^b[1-8]x?[a-h][1-8][+#]?$/i.test(notation) && notation[0] === 'b') return null;

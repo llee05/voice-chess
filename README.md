@@ -40,6 +40,8 @@ Ambiguous pieces still require the appropriate file or rank. Promotions require 
 
 Common number homophones are accepted at the destination rank: “knight f for” → `Nf4`, “queen h to” → `Qh2`, “rook a won” → `Ra1`, and “e ate queen” → `e8=Q`. This does not enable filler such as “knight to f three” or source/destination commands.
 
+Two reported knight mishearings also have narrow corrections: `96` or “ninety-six” → `Ne6`, and “nothing g5” → `Nxg5`. The numeric correction accepts `91` through `98` (or the corresponding “ninety…” words) as knight moves to the e-file. “nothing” is corrected only at the start of a move and requires a knight capture. These forms still need one matching legal move; ambiguous knights require the full disambiguated SAN.
+
 Source/destination commands (`e2e4`, “e two to e four”), NATO files, phrases such as “knight to f three”, and multiple moves in one utterance are rejected. Use one move at a time. For a rank-disambiguated bishop move, use uppercase `B` or say “bishop” (`B4e5`, “bishop four e five”); lowercase `b4e5` is rejected as a coordinate command. “stop” remains a voice control.
 
 Only final recognition results trigger moves. The move must match the board's own legal SAN. Immediately before submission, the extension rechecks the board instance, position, and availability of the requested move. When more than one piece could match, the extension displays disambiguated notation such as `Ngf3` or `Ndf3`; it never picks one for you. A legal move can still be an incorrect puzzle answer: Chess.com decides that. The extension does not read puzzle solutions or select moves.

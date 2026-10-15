@@ -9,6 +9,10 @@ for (const [text, san] of [
   ['knight f for', 'Nf4'], ['night f fore', 'Nf4'], ['e for', 'e4'], ['e too', 'e2'],
   ['queen h to', 'Qh2'], ['rook a won', 'Ra1'], ['e ate queen', 'e8=Q'],
   ['queen takes h for check', 'Qxh4+'], ['e takes d for', 'exd4'],
+  ['96', 'Ne6'], ['96.', 'Ne6'], ['96 check', 'Ne6+'], ['91', 'Ne1'], ['98', 'Ne8'],
+  ['ninety six', 'Ne6'], ['ninety-six', 'Ne6'], ['ninety-six check mate', 'Ne6#'],
+  ['nothing g5', 'Nxg5'], ['Nothing g five.', 'Nxg5'], ['nothing gee five', 'Nxg5'],
+  ['nothing g for check', 'Nxg4+'], ['nothing g5 checkmate', 'Nxg5#'],
   ['Knight f three.', 'Nf3'], ['night f3', 'Nf3'], ['Bb5', 'Bb5'],
   ['Qxh7', 'Qxh7'], ['queen takes h seven', 'Qxh7'], ['queen x h7', 'Qxh7'],
   ['exd5', 'exd5'], ['e takes d five', 'exd5'],
@@ -50,6 +54,8 @@ for (const text of [
   'castle both sides', 'castle king', 'please castle', 'castle then e4', 'castle++',
   'de0', 'de9', 'de5Q', 'deK', 'dxe=K', 'Bxe', 'e4Q', 'de e4', 'de ed',
   'before', 'knight before', 'rook a to e seven', 'e to e for', 'knight for e two', 'e for e five',
+  '9', '90', '99', '960', '196', '9.6', '96 e4', 'please 96', 'ninety sixty', 'nineteen six',
+  'nothing', 'nothing to g5', 'nothing g5 please', 'nothing g5 h7', 'do nothing g5', 'something g5', 'nothing castle',
 ]) {
   test(`rejects unsupported notation ${JSON.stringify(text.slice(0, 50))}`, () => assert.equal(parse(text), null));
 }
@@ -256,4 +262,29 @@ test('conflicting promotion alternatives never default to a queen', () => {
   const result = resolveAlternatives(['e8Q', 'e8N'], moves);
   assert.equal(result.move, undefined);
   assert.match(result.error, /e8=Q or e8=N/);
+});
+
+test('repairs reported knight mishearings only when the requested native move exists', () => {
+  const quiet = move('Ne6', 'f4', 'e6');
+  const capture = move('Nxg5', 'e4', 'g5');
+  assert.equal(resolveAlternatives(['96'], [quiet]).move, quiet);
+  assert.equal(resolveAlternatives(['ninety-six', 'knight e six'], [quiet]).move, quiet);
+  assert.equal(resolveAlternatives(['nothing g5', 'knight takes g5'], [capture]).move, capture);
+  assert.equal(resolveAlternatives(['96'], [move('Nd6', 'f5', 'd6')]).move, undefined);
+  assert.equal(resolveAlternatives(['nothing g5'], [move('Ng5', 'e4', 'g5')]).move, undefined);
+  assert.equal(resolveAlternatives(['96 checkmate'], [move('Ne6+', 'f4', 'e6')]).move, undefined);
+});
+
+test('repaired knight transcripts preserve source ambiguity and alternative conflicts', () => {
+  for (const [text, moves, choices] of [
+    ['96', [move('Nfe6', 'f4', 'e6'), move('Nce6', 'c5', 'e6')], /Nfe6 or Nce6/],
+    ['nothing g5', [move('Nexg5', 'e4', 'g5'), move('Nfxg5', 'f3', 'g5')], /Nexg5 or Nfxg5/],
+  ]) {
+    const result = resolveAlternatives([text], moves);
+    assert.equal(result.move, undefined);
+    assert.match(result.error, choices);
+  }
+  const result = resolveAlternatives(['nothing g5', 'knight takes e5'], [move('Nxg5', 'e4', 'g5'), move('Nxe5', 'f3', 'e5')]);
+  assert.equal(result.move, undefined);
+  assert.match(result.error, /Nxg5 or Nxe5/);
 });

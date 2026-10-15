@@ -94,6 +94,40 @@ const path = require('node:path');
     assert.equal((await submitted())[0].to, 'e4');
     console.log('✓ Destination-rank homophones work; conflicting legal transcripts require repetition');
 
+    await reset({ fen: '6k1/8/8/8/5N2/8/8/4K3 w - - 0 1', moves: [{ from: 'f4', to: 'e6', san: 'Ne6' }] });
+    await mic.click();
+    await speak('96', false);
+    assert.equal((await submitted()).length, 0);
+    await speak('96');
+    assert.equal((await submitted())[0].to, 'e6');
+    assert.equal(await status.textContent(), 'Sent Ne6');
+    console.log('✓ The reported numeric knight transcript 96 resolves to Ne6 only on a final result');
+
+    await reset({ fen: '6k1/8/8/2N5/5N2/8/8/4K3 w - - 0 1', moves: [
+      { from: 'f4', to: 'e6', san: 'Nfe6' }, { from: 'c5', to: 'e6', san: 'Nce6' },
+    ] });
+    await mic.click();
+    await speak('96');
+    assert.equal((await submitted()).length, 0);
+    assert.match(await status.textContent(), /Nfe6 or Nce6/);
+    await speak('knight f e six');
+    assert.equal((await submitted())[0].from, 'f4');
+    console.log('✓ Repaired numeric knight speech still requires source disambiguation');
+
+    await reset({ fen: '6k1/8/8/6p1/4N3/8/8/4K3 w - - 0 1', moves: [{ from: 'e4', to: 'g5', san: 'Nxg5' }] });
+    await mic.click();
+    await speak('nothing g5');
+    assert.equal((await submitted())[0].to, 'g5');
+    assert.equal(await status.textContent(), 'Sent Nxg5');
+    console.log('✓ The reported nothing g5 transcript resolves to the requested knight capture');
+
+    await reset({ fen: '6k1/8/8/8/4N3/8/8/4K3 w - - 0 1', moves: [{ from: 'e4', to: 'g5', san: 'Ng5' }] });
+    await mic.click();
+    await speak('nothing g5');
+    assert.equal((await submitted()).length, 0);
+    assert.match(await status.textContent(), /No legal move matches Nxg5/);
+    console.log('✓ The nothing repair requires a capture and cannot submit a quiet knight move');
+
     await reset();
     await mic.click();
     await speak('knight g f three', true, ['knight f three']);
