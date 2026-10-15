@@ -311,32 +311,44 @@ test('quinn does not choose between ambiguous queens', () => {
   assert.equal(resolve(parse('quinn a h four'), moves).move.from, 'a4');
 });
 
-test('legal-move vocabulary keeps disambiguation and explicit promotion in every move hint', () => {
+test('spoken grammar includes legal moves and guards against invented disambiguation or promotion', () => {
   const moves = [move('Ngf3', 'g1', 'f3'), move('Ndf3', 'd2', 'f3'), move('exd5', 'e4', 'd5'),
     move('e8=N', 'e7', 'e8', { promotion: 'n' }), move('Bxe5+', 'b2', 'e5'),
     move('O-O', 'e1', 'g1'), move('O-O-O', 'e1', 'c1')];
   const phrases = vocabulary(moves);
-  for (const expected of ['knight g f three', 'knight d f three', 'e takes d five', 'e d five', 'e d',
+  for (const phrase of ['knight g f three', 'knight d f three', 'e takes d five', 'e d five', 'e d',
     'e eight equals knight', 'e eight knight', 'bishop takes e five check', 'short castle', 'castle queen side', 'stop']) {
-    assert.ok(phrases.includes(expected), `Missing legal phrase: ${expected}`);
-  }
-  for (const absent of ['knight f three', 'e eight', 'castle', 'queen h seven']) assert.equal(phrases.includes(absent), false);
-  for (const phrase of phrases) {
+    assert.ok(phrases.includes(phrase), `Missing phrase: ${phrase}`);
     const command = parse(phrase);
-    assert.ok(command, `Unparseable hint: ${phrase}`);
-    if (command.kind === 'move') assert.ok(resolve(command, moves).move, `Hint must identify one legal move: ${phrase}`);
+    assert.ok(command.kind === 'stop' || resolve(command, moves).move);
   }
+  for (const phrase of ['knight f three', 'e eight', 'castle']) {
+    assert.ok(phrases.includes(phrase));
+    assert.ok(resolve(parse(phrase), moves).error, `Guard must not select a move: ${phrase}`);
+  }
+  assert.equal(phrases.includes('queen h seven'), false);
+  assert.ok(phrases.every(phrase => /^[a-z]+(?: [a-z]+)*$/.test(phrase)), 'Vosk receives words, not compact SAN');
   assert.equal(new Set(phrases).size, phrases.length);
 });
 
-test('rankless and castle hints are included only when they identify one legal move', () => {
-  assert.equal(vocabulary([move('dxe5', 'd4', 'e5'), move('dxe3', 'd2', 'e3')]).includes('d e'), false);
-  const castle = move('O-O', 'e1', 'g1');
-  assert.equal(vocabulary([castle, castle]).includes('castle'), true);
+test('ambiguous pawn shorthand and missing promotion pieces remain recognizable but rejected', () => {
+  const ambiguous = [move('dxe5', 'd4', 'e5'), move('dxe3', 'd2', 'e3')];
+  assert.ok(vocabulary(ambiguous).includes('d e'));
+  assert.ok(resolve(parse('d e'), ambiguous).error);
   const promotions = ['Q', 'N'].map(piece => move('axb8=' + piece, 'a7', 'b8', { promotion: piece.toLowerCase() }));
-  assert.ok(vocabulary(promotions).includes('a b queen'));
-  assert.ok(vocabulary(promotions).includes('a b knight'));
-  assert.equal(vocabulary(promotions).includes('a b'), false);
+  for (const phrase of ['a b queen', 'a b knight', 'a b']) assert.ok(vocabulary(promotions).includes(phrase));
+  assert.ok(resolve(parse('a b'), promotions).error);
+  const quiet = [move('Ng5', 'e4', 'g5')];
+  assert.ok(vocabulary(quiet).includes('knight takes g five'));
+  assert.ok(resolve(parse('knight takes g five'), quiet).error);
+});
+
+test('spoken vocabulary preserves check on castling and uses separate mate words', () => {
+  const moves = [move('O-O+', 'e1', 'g1'), move('Qxh7#', 'h1', 'h7')];
+  for (const phrase of ['castle check', 'short castle check', 'castle king side check', 'queen h seven check mate']) {
+    assert.ok(vocabulary(moves).includes(phrase));
+    assert.ok(resolve(parse(phrase), moves).move);
+  }
 });
 
 test('missing or nonstandard legal SAN produces only stop controls, without invented hints', () => {

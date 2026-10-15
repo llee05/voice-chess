@@ -2,81 +2,66 @@
 
 A minimal browser extension for **Chess.com Puzzle Rush**. Click the microphone, speak a move in standard algebraic notation (SAN) or common shorthand, keep solving.
 
-Vanilla JavaScript, HTML, CSS, and Manifest V3. No framework, build step, backend, API key, or runtime dependencies. Chess.com's board supplies legal moves and processes the moves you request.
+Vanilla JavaScript, HTML, CSS, and Manifest V3, with a bundled [Vosk](https://alphacephei.com/vosk/) English recognizer. No build step, backend, API key, or separate model installation. Chess.com's board supplies legal moves and processes the moves you request.
 
 ## Install
 
-1. Download or clone this repository.
+1. Download or clone this repository, including `extension/vendor/` (the model is included).
 2. In **Google Chrome**, open `chrome://extensions` and turn on **Developer mode**.
 3. Click **Load unpacked** and select this repository's **`extension/`** folder.
 4. Open [Puzzle Rush](https://www.chess.com/puzzles/rush), or reload it if it is already open.
 5. Start a rush. Click the Voice Chess microphone below the board or in a clear corner of the window and allow microphone access for Chess.com. If every visible position would cover the board or page controls, scroll down to the control at the end of the page.
+6. Wait for **Listening · offline**, then say one move. The bundled model loads into memory when you start listening.
 
-The extension is ready to load directly; installing Node or running npm is unnecessary for normal use. Google Chrome is the primary target. Other Chromium browsers can load it, but their speech service may be unavailable. Firefox is not supported.
+No Node installation or npm command is needed for normal use. The bundled model and runtime add about **46 MB** to the unpacked extension. There is no download button or additional setup. Google Chrome is the primary target; other Chromium browsers may work but are not fully verified. Firefox is not supported.
 
 ## Commands
 
 | Notation | Say | Action |
 | --- | --- | --- |
 | `e4` / `e5` | “e four” / “e five” | Move a pawn |
-| `Nf3` | “knight f three” or “N f three” | Move a knight |
-| `Qxh7` | “queen takes h seven” or “queen h seven” | Capture with the queen; “takes” is optional |
-| `exd5` | “e takes d five” or “e d five” | Capture with the e-file pawn; `ed5` also works |
-| `dxe5` | “d e” or “d takes e” | File-only pawn capture (`de`); requires one matching legal move |
+| `Nf3` | “knight f three” | Move a knight |
+| `Qxh7` | “queen takes h seven” or “queen h seven” | Capture; “takes” is optional |
+| `exd5` | “e takes d five” or “e d five” | Capture with the e-file pawn |
+| `dxe5` | “d e” or “d takes e” | File-only pawn capture; requires one matching legal move |
 | `Ngf3` | “knight g f three” | Specify the knight's file |
 | `R1e2` | “rook one e two” | Specify the rook's rank |
-| `O-O` / `O-O-O` | “O O” / “O O O”, “short castle” / “long castle” | Castle kingside / queenside; “castle king side” / “castle queen side” also work |
+| `O-O` / `O-O-O` | “short castle” / “long castle” | Castle; “castle king side” / “castle queen side” also work |
 | Either castle | “castle” | Castle only when exactly one side is legal |
-| `e8=Q` / `e8=N` | “e eight queen” / “e eight knight” | Promote to the specified piece; “equals” is optional (`e8Q`, `e8N`) |
-| `dxe8=N` | “d e knight” or “d e eight knight” | Capture and promote; the promotion piece remains mandatory |
+| `e8=Q` / `e8=N` | “e eight queen” / “e eight knight” | Promote to the specified piece; “equals” is optional |
+| `dxe8=N` | “d e knight” or “d e eight knight” | Capture and promote; the piece remains mandatory |
 | `Qh7+` / `Qh7#` | “queen h seven check” / “queen h seven checkmate” | Include check or mate |
-| — | “stop” | Turn the microphone off |
+| — | “stop”, “pause”, “stop listening”, “pause listening”, “microphone off” | Turn the microphone off |
 
-SAN follows the [PGN notation specification](https://www.saremba.de/chessgml/standards/pgn/pgn-complete.htm). Spoken piece names and numbers normalize to that notation, and supported shorthand is matched against the board's own legal SAN. You may omit `x` or “takes”: `Qh7` can match `Qxh7`, and `de5` can match `dxe5`. Explicit `x` or “takes” still requires a capture. Pawn captures must include both files; `e5` alone does not request a pawn capture.
+Speak file letters and full piece names. SAN follows the [PGN notation specification](https://www.saremba.de/chessgml/standards/pgn/pgn-complete.htm). Spoken moves normalize to that notation and resolve against the board's own complete legal SAN. You may omit captures, check and mate markers; explicit “takes” must match a capture, and explicit check or mate must be correct. Pawn captures require both files: “e five” alone does not request a capture.
 
-For pawn captures you may also omit the destination rank: `de` or “d e” matches a legal d-file pawn capture onto the e-file, including en passant. If both `dxe5` and `dxe3` are legal, the control shows both and waits; say “d e five” to specify the rank. Likewise, “castle” works when exactly one castling move is legal. If both sides are legal, specify “short castle” / “castle kingside” or “long castle” / “castle queenside”. Shorthand never chooses a puzzle answer for you.
+If both `dxe5` and `dxe3` are legal, “d e” shows both choices; say “d e five” to specify the rank. If both castles are legal, specify the side. Ambiguous pieces require the appropriate file, rank, or full source square as SAN disambiguation. Promotions always require a queen, rook, bishop, or knight, even when only one promotion is supplied by the board. Shorthand never chooses a puzzle answer for you.
 
-Ambiguous pieces still require the appropriate file or rank. Promotions require an explicit queen, rook, bishop, or knight, even if the board lists only one promotion; you may omit `=` or “equals” (`e8Q`, “e eight queen”, `deN`). Check (`+`) and mate (`#`) are optional; if supplied, they must be correct. Uppercase `B` or the spoken word “bishop” identifies a bishop; lowercase `b` identifies the pawn file in capture shorthand (`Be5` is a bishop move, `be5` requests `bxe5`). Say “bishop e five” to identify the bishop clearly.
+Source/destination commands (“e two to e four”), NATO files, filler (“knight to f three”), and multiple moves in one utterance are rejected. Use one move at a time and leave a brief pause for the recognizer to finish. The parser still understands compact SAN and earlier transcript corrections, but the speech engine's vocabulary uses spoken moves rather than arbitrary dictated text.
 
-Common number homophones are accepted at the destination rank: “knight f for” → `Nf4`, “queen h to” → `Qh2`, “rook a won” → `Ra1`, and “e ate queen” → `e8=Q`. This does not enable filler such as “knight to f three” or source/destination commands.
+## Recognition and safety
 
-The reported mishearing “quinn” is accepted as “queen” in moves, promotions, and castling phrases: “quinn h seven”, “e eight quinn”, and “castle quinn side”. Normal legality and ambiguity checks still apply.
+Vosk runs locally in a worker with a vocabulary derived from **all current legal moves**, plus stop controls. The vocabulary refreshes when the board, FEN, or board availability changes. No puzzle solution, engine analysis, or preferred move is supplied. Ambiguous and incomplete forms are also included as guard phrases so the recognizer can pass them through for clarification or rejection rather than invent a source piece or promotion.
 
-Two reported knight mishearings also have narrow corrections: `96` or “ninety-six” → `Ne6`, and “nothing g5” → `Nxg5`. The numeric correction accepts `91` through `98` (or the corresponding “ninety…” words) as knight moves to the e-file. “nothing” is corrected only at the start of a move and requires a knight capture. These forms still need one matching legal move; ambiguous knights require the full disambiguated SAN.
+Vosk's constrained language model can still mishear speech or recombine words. Unknown results and transcripts outside the complete supplied phrase list are rejected. Only final results can submit a move; interim text is display only. A final result consumes its recognizer, and buffered or late results are discarded before the next command. Position changes invalidate pending speech even when the legal vocabulary happens to be identical.
 
-Source/destination commands (`e2e4`, “e two to e four”), NATO files, phrases such as “knight to f three”, and multiple moves in one utterance are rejected. Use one move at a time. For a rank-disambiguated bishop move, use uppercase `B` or say “bishop” (`B4e5`, “bishop four e five”); lowercase `b4e5` is rejected as a coordinate command. “stop” remains a voice control.
+Immediately before submission, the extension rechecks the board instance, FEN, player turn, and requested move. Idle, disabled, animating, finished, and opponent-turn boards block moves. The board's own ordinary input handler processes the request. A legal move can still be an incorrect puzzle answer: Chess.com decides that. Rejected or uncertain submissions are never automatically replayed.
 
-Only final recognition results trigger moves. The move must match the board's own legal SAN. Immediately before submission, the extension rechecks the board instance, position, and availability of the requested move. When more than one piece could match, the extension displays disambiguated notation such as `Ngf3` or `Ndf3`; it never picks one for you. A legal move can still be an incorrect puzzle answer: Chess.com decides that. The extension does not read puzzle solutions or select moves.
-
-Recognition uses the browser's first preferred English locale (for example, `en-AU`), falling back to `en-US`. It [requests up to five transcript alternatives](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition/maxAlternatives) per final utterance, though the speech service may return fewer. A move can be recovered from an alternative when the matching candidates identify one legal move. If candidates point to different legal moves, or a candidate leaves the source piece ambiguous, the status shows the SAN choices and asks you to repeat. When an alternative is used, the transcript shows “original → accepted”. A possible “stop” command in any returned alternative turns off the microphone.
-
-Where supported, Voice Chess uses an installed local English speech model and supplies [phrase hints](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition/phrases) built from the board's current legal SAN. Hints include spoken moves, unambiguous pawn shorthand, castling, and stop controls. They preserve required source disambiguation and explicit promotion pieces, give every phrase the same boost, and refresh as the position changes. No puzzle solution or preferred move is supplied to the recognizer.
-
-If Chrome reports that the model can be downloaded, a **Download speech model** button appears after you start the mic. This is optional: ordinary recognition works without downloading a model. Clicking the button releases the mic and asks Chrome to download the model for your preferred English locale. After the download, click the mic again to enable move hints. Voice Chess never starts a model download automatically. Unsupported or failed local recognition falls back once to standard recognition and asks you to repeat the move; permission denial still stops the mic.
-
-Phrase hints encourage the vocabulary rather than restrict the speech engine to an exclusive list. The deprecated [grammar API has no effect on recognition services](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition/grammars). The final accepted move must always pass the extension's legal-SAN checks, including when hints are unavailable. Actual hint support depends on the browser and installed model; automated tests do not establish a real microphone accuracy improvement.
-
-Recognition handles one utterance at a time and [requests finalization when the browser detects the end of speech](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition/stop). The status shows “Recognizing…” while the final transcript is pending. Only a final result can submit a move; recognition rearms after 50 ms when an utterance completes. Actual recognition latency still depends on the browser's speech service.
-
-Final moves submit immediately when the board is ready. Once the position changes, the next final command can submit without a fixed pause between moves. An unchanged position remains protected against overlapping submissions.
-
-The mic stays armed between moves and puzzles. A speech-service disconnection without a final result reconnects after 300 ms, with a limit of four consecutive restarts without a new final result. Repeated final events are ignored; if one event contains several final utterances, only the first is used and the others are discarded. It switches off when you hide the tab, navigate away from Puzzle Rush, click the button, or say “stop”. Return to the tab and click the mic to resume. A rejected submission is not automatically replayed.
+The microphone stays armed between moves and puzzles. It switches off when you hide the tab, navigate away from Puzzle Rush, click the button, or say “stop”. Stopping releases the microphone, audio context, recognizer frame and worker, including during model startup. Return to the tab and click the mic to resume. Microphone and model failures stop listening with a status message; there is no automatic service fallback or retry loop.
 
 ## Privacy and troubleshooting
 
-Audio recognition uses the browser's [Web Speech API](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition). Chrome may send audio to its speech service, so an internet connection can be required. Voice Chess does not record audio, persist transcripts, or send data to a backend. The latest transcript is displayed only in memory on the page.
+Speech recognition is **offline**: the JavaScript/WASM runtime and US English model are bundled in `extension/vendor/`. Audio stays on the device. Voice Chess does not use Chrome's network speech service, upload audio, persist transcripts, store recordings, or introduce telemetry. PCM is processed in memory and discarded. Model files are unpacked into worker memory; they are not copied to IndexedDB. Chess.com itself still requires its usual internet connection.
 
-Local-model recognition runs on the device when available, but standard recognition and fallback may still process audio online. Optional model downloads are handled by Chrome and require a network connection and local disk space; no model files are bundled with the extension.
+The extension declares no additional API permissions. Scripts inject only on the standard `https://www.chess.com/puzzles/rush` route. The board adapter and UI run in the page's JavaScript world to reach its board API; a small isolated script connects them to a packaged extension frame. Only `recognizer.html` is web-accessible to Chess.com. The extension CSP permits packaged WebAssembly without allowing JavaScript `eval` or remote code. Microphone permission belongs to the puzzle page and is requested only after clicking the control. The toolbar popup simply opens Puzzle Rush.
 
-The extension declares no additional API permissions and injects scripts only on the standard `https://www.chess.com/puzzles/rush` route. The content scripts run in the [page's JavaScript world](https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts) to reach its board API. The toolbar popup opens Puzzle Rush; microphone permission is requested on the puzzle page after you click the control.
-
-- **No control:** reload the Puzzle Rush tab after loading or updating the extension. Use the standard URL above.
+- **No control:** reload the extension and refresh the Puzzle Rush tab. Use the standard URL above.
 - **Microphone denied:** allow the microphone in Chess.com's address-bar site settings, then click the mic again.
-- **Speech unavailable or connection error:** use Google Chrome with internet access and a working microphone. Some Chromium builds expose the API without a working recognition service.
-- **Wrong transcript:** use full piece names and keep the file and rank distinct (“knight, f, three”). Leave a brief pause between moves so Chrome can finish each utterance. If shorthand or alternative transcripts are ambiguous, repeat the full SAN shown in the status. Recognition accuracy and latency depend on your browser, microphone, and connection; the extension cannot reconstruct speech that the browser did not capture.
+- **Model cannot start:** ensure the complete `extension/vendor/` folder is present. Reload the extension and tab. The model needs several seconds to load and substantially more working memory than its archive size; closing other heavy tabs may help.
+- **Wrong or unclear transcript:** use full piece names and pronounce the file letter and rank distinctly (“knight, e, six”). Wait for “Listening · offline” before the first move and leave a brief pause between moves. Repeat the disambiguated SAN shown in the status when necessary. Fast speech, accents, background noise, and microphone quality can still cause errors; legal vocabulary does not guarantee the intended move was heard.
 - **Board does not change:** ensure a rush is running, wait for animations, and use the mouse if the site rejects the request. Toggle the mic to retry the same command deliberately.
 
-Chess.com's board API is undocumented and may change. The adapter checks its expected methods and move data, including consistent promotion choices, and stops with a message when they are unavailable. Its integration approach is informed by the public [Chess Helper board adapter](https://github.com/everyonesdesign/Chess-Helper/blob/master/app/src/chessboard/component-chessboard/index.ts). The extension was loaded on the live logged-out Puzzle Rush page and its board methods were checked. Live signed-in Puzzle Rush and real microphone recognition still need a manual check; automated tests use a simulated board API and speech events, not a Chess.com account.
+Chess.com's board API is undocumented and may change. The adapter checks its methods and data, including consistent promotion choices, and fails with a message when they are unavailable. Its integration approach is informed by the public [Chess Helper board adapter](https://github.com/everyonesdesign/Chess-Helper/blob/master/app/src/chessboard/component-chessboard/index.ts). Live signed-in Puzzle Rush and real microphone recognition still need a manual check. Fixture tests and synthetic audio do not establish a real-world accuracy improvement.
 
 ## Development
 
@@ -89,20 +74,23 @@ npm run check
 npm run test:browser
 ```
 
-Set `CHROMIUM_PATH` if Chromium is not at `/usr/bin/chromium`. Playwright is a development-only dependency; browser tests load the actual unpacked extension on an intercepted Chess.com URL. They cover SAN and shorthand delivery, transcript alternatives and conflicts, number homophones, English locale selection, changing legal-move hints, opt-in model setup and fallback, ambiguous pawn captures and castling, duplicate speech events, stale positions, black-side puzzles, underpromotion, microphone denial, failed submissions, navigation, hidden-tab cleanup, keyboard access, narrow or short viewports, and page containers that clip overflow. These checks simulate recognition results and model installation; they do not download a model or measure real microphone accuracy. The visual screenshot is saved to `artifacts/voice-chess.png` and clearly labels the local test board.
+Set `CHROMIUM_PATH` if Chromium is not at `/usr/bin/chromium`. Playwright is development-only. Browser checks load the unpacked extension on an intercepted Chess.com URL with a simulated board and audio capture. They test the real frame/port connection with a simulated decoder for delivery, grammar changes, ambiguity, duplicates, stale speech, promotions, microphone failures, navigation cleanup, keyboard access, and narrow/clipped layouts. A second check loads the **actual packaged Vosk worker and model**, disables networking, applies a restrictive page CSP, and decodes synthetic English chess phrases. It also passes a WAV through Chromium's fake microphone using native `getUserMedia` and `AudioContext`, and verifies media tracks end when stopped. These are not live gameplay or human microphone tests. Screenshots go to ignored `artifacts/`.
 
-`npm run check` validates Puzzle Rush injection scope, content script order and syntax, permissions, version alignment, and packaged icon dimensions.
+`npm run check` validates injection scope, script order and syntax, CSP, permissions, version alignment, licenses, model/runtime checksums, and icon dimensions. See [third-party assets and licenses](extension/vendor/README.md). Maintainers can refresh the pinned assets with `python scripts/vendor-vosk.py`; normal users do not run this script, and it is not a build prerequisite.
 
 ```text
 extension/
-  manifest.json   Narrow Puzzle Rush scope, no extra API permissions
-  commands.js     Speech grammar and legal-move selection
+  manifest.json   Puzzle Rush scope, local WASM CSP, packaged frame access
+  commands.js     Transcript parsing, legal-move vocabulary and resolution
   board.js        Chess.com board API adapter
-  speech.js       Recognition lifecycle and reconnect behavior
+  speech.js       Page audio capture, position epochs and recognition lifecycle
   content.js      Small page control and command delivery
+  bridge.js       Isolated-world connection to the extension frame
+  recognizer.*    Packaged Vosk frame and bounded audio handling
+  vendor/         Checked-in Vosk runtime/model, checksums and licenses
   popup.html/css  Toolbar shortcut to Puzzle Rush
   icons/          Packaged PNGs and editable SVG source
-tests/            Unit tests and browser fixture
+tests/            Unit tests, browser fixtures and real-decoder smoke check
 ```
 
-After editing, click **Reload** for Voice Chess in `chrome://extensions`, then refresh Puzzle Rush. To regenerate PNG icons from the SVG, run `node scripts/icons.cjs`.
+After editing, click **Reload** for Voice Chess in `chrome://extensions`, then refresh Puzzle Rush. No production build is required. To regenerate PNG icons from the SVG, run `node scripts/icons.cjs`.

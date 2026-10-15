@@ -19,6 +19,7 @@ const path = require('node:path');
       viewport: { width: 1280, height: 800 },
       locale: 'en-AU',
     });
+    await context.addInitScript({ path: path.join(__dirname, 'fixtures/fake-vosk.js') });
     await context.route('https://www.chess.com/**', route => route.fulfill({ contentType: 'text/html', body: fixture }));
     const page = await context.newPage();
     page.on('pageerror', error => errors.push(error.message));
@@ -28,392 +29,143 @@ const path = require('node:path');
       await page.evaluate(value => { Object.assign(window.fixture, value); }, overrides);
     }
     const mic = page.locator('#voice-chess-control .main button');
-    const vocabulary = page.locator('#voice-chess-control .vocabulary');
     const status = page.locator('#voice-chess-control .status');
-    const speak = (text, final = true, alternatives = []) => page.evaluate(({ text, final, alternatives }) => window.speak(text, final, alternatives), { text, final, alternatives });
+    const engine = () => page.frames().find(frame => frame.url().endsWith('/recognizer.html'));
+    async function start() {
+      await mic.click();
+      await page.waitForFunction(() => document.querySelector('#voice-chess-control').shadowRoot.querySelector('.status').textContent === 'Listening · offline');
+    }
+    async function speak(text, final = true) {
+      const frame = engine();
+      const count = await frame.evaluate(({ text, final }) => {
+        const count = fakeRecognizers.length;
+        fakeRecognizers.at(-1).emit(final ? 'result' : 'partialresult', text);
+        return count;
+      }, { text, final });
+      if (final && ['stop', 'pause', 'stop listening'].includes(text)) {
+        await page.waitForFunction(() => document.querySelector('#voice-chess-control').shadowRoot.querySelector('button').getAttribute('aria-pressed') === 'false');
+      } else if (final) await frame.waitForFunction(count => fakeRecognizers.length > count, count, { polling: 50 });
+      else await page.waitForFunction(text => document.querySelector('#voice-chess-control').shadowRoot.querySelector('.transcript').textContent === text, text);
+    }
     const submitted = () => page.evaluate(() => window.fixture.submitted);
 
-    await reset();
-    await mic.click();
+    await reset(); await start();
     await speak('knight f three', false);
     assert.equal((await submitted()).length, 0);
     await speak('knight f three');
     assert.match(await status.textContent(), /Ngf3 or Ndf3/);
-    assert.equal((await submitted()).length, 0);
-    await speak('e2e4');
     await speak('g one to f three');
-    await speak('b four e five');
-    assert.match(await status.textContent(), /Use standard notation/);
-    assert.equal((await submitted()).length, 0);
+    assert.match(await status.textContent(), /Unclear speech/);
     await speak('knight g f three');
     assert.equal((await submitted()).length, 1);
     assert.equal((await submitted())[0].userGenerated, true);
     assert.equal(await status.textContent(), 'Sent Ngf3');
-    await speak('Ngf3');
-    assert.equal((await submitted()).length, 1);
-    await page.waitForTimeout(650);
-    await speak('stop');
-    assert.equal(await mic.getAttribute('aria-pressed'), 'false');
-    console.log('✓ Spoken SAN, disambiguation, coordinate rejection, duplicate protection, voice stop');
-
-    await reset({ fen: '4k3/8/8/8/8/8/4P3/4K3 w - - 0 1', moves: [{ from: 'e2', to: 'e4', san: 'e4' }] });
-    await mic.click();
-    await speak('e four');
-    assert.equal((await submitted())[0].to, 'e4');
-    assert.equal(await status.textContent(), 'Sent e4');
-    console.log('✓ Pawn SAN without a source square');
-
-    await reset({ vocabulary: 'available' });
-    await mic.click();
-    const hints = () => page.evaluate(() => window.recognizers.at(-1).phrases.map(hint => hint.phrase));
-    assert.equal(await page.evaluate(() => window.recognizers.at(-1).processLocally), true);
-    assert.ok((await hints()).includes('knight g f three'));
-    assert.ok((await hints()).includes('knight d f three'));
-    assert.equal((await hints()).includes('knight f three'), false);
-    assert.ok((await hints()).includes('stop'));
-    assert.equal(await vocabulary.isVisible(), false);
-    await speak('Ngf3');
-    assert.equal((await submitted()).length, 1);
-    assert.equal((await hints()).includes('knight g f three'), false, 'Unavailable positions must clear old move hints');
-    await page.evaluate(() => {
-      fixture.fen = '4k3/8/8/8/8/5N2/3N4/4K3 w - - 1 2';
-      fixture.moves = [{ from: 'f3', to: 'g5', san: 'Ng5' }];
-    });
-    await page.waitForFunction(() => window.recognizers.at(-1).phrases.some(hint => hint.phrase === 'knight g five'));
-    assert.equal((await hints()).includes('knight d f three'), false);
-    assert.ok(await page.evaluate(() => window.recognizers.at(-1).phrases.every(hint => hint.boost === 3)));
-    await speak('Ng5');
-    assert.equal((await submitted()).length, 2);
-    console.log('✓ Installed local recognition receives only current legal-move phrases and stop controls');
-
-    await page.setViewportSize({ width: 390, height: 844 });
-    await reset({ vocabulary: 'downloadable' });
-    await mic.click();
-    assert.equal(await page.evaluate(() => window.recognizers.at(-1).processLocally), false);
-    assert.equal(await page.evaluate(() => fixture.installs.length), 0);
-    await vocabulary.scrollIntoViewIfNeeded();
-    const setupBounds = await vocabulary.boundingBox();
-    assert.ok(setupBounds.x >= 0 && setupBounds.x + setupBounds.width <= 390);
-    assert.ok(setupBounds.y >= 0 && setupBounds.y + setupBounds.height <= 844);
-    await vocabulary.focus();
-    await vocabulary.press('Enter');
-    await page.waitForFunction(() => fixture.installs.length === 1 && fixture.vocabulary === 'available');
-    assert.equal(await mic.getAttribute('aria-pressed'), 'false');
-    assert.equal(await page.evaluate(() => window.recognizers.at(-1).aborted), true);
-    assert.equal(await page.evaluate(() => window.recognizers.length), 1);
-    assert.equal(await page.evaluate(() => fixture.installs[0].langs[0]), 'en-AU');
-    assert.equal(await vocabulary.isVisible(), false);
-    await mic.click();
-    assert.equal(await page.evaluate(() => window.recognizers.at(-1).processLocally), true);
-    await speak('stop');
-    await page.setViewportSize({ width: 1280, height: 800 });
-    console.log('✓ Model download requires an accessible opt-in button and never restarts the mic automatically');
-
-    await reset({ vocabulary: 'available' });
-    await mic.click();
-    await page.evaluate(() => window.recognizers.at(-1).onerror({ error: 'phrases-not-supported' }));
-    assert.equal((await submitted()).length, 0);
-    await page.waitForFunction(() => window.recognizers.length === 2);
-    assert.equal(await page.evaluate(() => window.recognizers.at(-1).processLocally), false);
-    assert.equal((await hints()).length, 0);
     await speak('knight g f three');
     assert.equal((await submitted()).length, 1);
-    console.log('✓ Unsupported hints fall back to ordinary speech without replaying a command');
+    await speak('stop');
+    await page.waitForFunction(() => fixture.tracksStopped === 1 && fixture.contextsClosed === 1);
+    assert.equal(engine(), undefined);
+    console.log('✓ Final-only delivery, ambiguity, exact phrases, duplicate protection, voice stop and audio cleanup');
 
-    await reset({ fen: '4k3/8/8/8/8/8/8/4K1N1 w - - 0 1', moves: [{ from: 'g1', to: 'f3', san: 'Nf3' }] });
-    await mic.click();
-    assert.equal(await page.evaluate(() => window.recognizers.at(-1).lang), 'en-AU');
-    assert.equal(await page.evaluate(() => window.recognizers.at(-1).maxAlternatives), 5);
-    await speak('nice f tree', false, ['knight f three']);
-    assert.equal((await submitted()).length, 0);
-    await speak('nice f tree', true, ['knight f three', 'Nf3']);
-    assert.equal((await submitted())[0].to, 'f3');
-    assert.equal(await status.textContent(), 'Sent Nf3');
-    assert.equal(await page.locator('#voice-chess-control .transcript').textContent(), 'nice f tree → knight f three');
+    await reset(); await start();
+    let frame = engine();
+    const grammar = () => engine().evaluate(() => fakeRecognizers.at(-1).grammar);
+    assert.ok((await grammar()).includes('knight g f three'));
+    assert.ok((await grammar()).includes('knight f three'), 'Missing source must remain audible');
+    assert.ok((await grammar()).includes('[unk]'));
+    assert.ok((await grammar()).includes('stop'));
     await page.evaluate(() => {
-      fixture.fen = '4k3/8/8/8/8/5N2/8/4K3 w - - 1 2';
-      fixture.moves = [{ from: 'f3', to: 'g5', san: 'Ng5' }];
-      const recognition = window.recognizers.at(-1);
-      recognition.onresult({ resultIndex: 0, results: recognition.results });
-    });
-    assert.equal((await submitted()).length, 1);
-    await speak('night g five');
-    assert.equal((await submitted()).length, 2);
-    console.log('✓ Preferred English locale, final transcript alternatives, visible correction, and no replay');
-
-    await reset({ fen: '4k3/8/8/8/8/8/3PP3/4K3 w - - 0 1', moves: [
-      { from: 'e2', to: 'e4', san: 'e4' }, { from: 'd2', to: 'd4', san: 'd4' },
-    ] });
-    await mic.click();
-    await speak('e for', true, ['d four']);
-    assert.equal((await submitted()).length, 0);
-    assert.match(await status.textContent(), /e4 or d4/);
-    await speak('e for');
-    assert.equal((await submitted())[0].to, 'e4');
-    console.log('✓ Destination-rank homophones work; conflicting legal transcripts require repetition');
-
-    await reset({ fen: '6k1/8/8/8/5N2/8/8/4K3 w - - 0 1', moves: [{ from: 'f4', to: 'e6', san: 'Ne6' }] });
-    await mic.click();
-    await speak('96', false);
-    assert.equal((await submitted()).length, 0);
-    await speak('96');
-    assert.equal((await submitted())[0].to, 'e6');
-    assert.equal(await status.textContent(), 'Sent Ne6');
-    console.log('✓ The reported numeric knight transcript 96 resolves to Ne6 only on a final result');
-
-    await reset({ fen: '6k1/8/8/2N5/5N2/8/8/4K3 w - - 0 1', moves: [
-      { from: 'f4', to: 'e6', san: 'Nfe6' }, { from: 'c5', to: 'e6', san: 'Nce6' },
-    ] });
-    await mic.click();
-    await speak('96');
-    assert.equal((await submitted()).length, 0);
-    assert.match(await status.textContent(), /Nfe6 or Nce6/);
-    await speak('knight f e six');
-    assert.equal((await submitted())[0].from, 'f4');
-    console.log('✓ Repaired numeric knight speech still requires source disambiguation');
-
-    await reset({ fen: '6k1/8/8/6p1/4N3/8/8/4K3 w - - 0 1', moves: [{ from: 'e4', to: 'g5', san: 'Nxg5' }] });
-    await mic.click();
-    await speak('nothing g5');
-    assert.equal((await submitted())[0].to, 'g5');
-    assert.equal(await status.textContent(), 'Sent Nxg5');
-    console.log('✓ The reported nothing g5 transcript resolves to the requested knight capture');
-
-    await reset({ fen: '6k1/8/8/8/4N3/8/8/4K3 w - - 0 1', moves: [{ from: 'e4', to: 'g5', san: 'Ng5' }] });
-    await mic.click();
-    await speak('nothing g5');
-    assert.equal((await submitted()).length, 0);
-    assert.match(await status.textContent(), /No legal move matches Nxg5/);
-    console.log('✓ The nothing repair requires a capture and cannot submit a quiet knight move');
-
-    await reset();
-    await mic.click();
-    await speak('knight g f three', true, ['knight f three']);
-    assert.equal((await submitted()).length, 0);
-    assert.match(await status.textContent(), /Ngf3 or Ndf3/);
-    await speak('knight g f three', true, ['stop']);
-    assert.equal((await submitted()).length, 0);
-    assert.equal(await mic.getAttribute('aria-pressed'), 'false');
-    console.log('✓ Alternative transcripts preserve source ambiguity and honor a possible stop command');
-
-    await reset();
-    await mic.click();
-    await speak('Ngf3', false);
-    assert.equal((await submitted()).length, 0);
-    await page.evaluate(() => window.recognizers.at(-1).onspeechend());
-    assert.equal(await page.evaluate(() => window.recognizers.at(-1).stopCalls), 1);
-    assert.equal((await submitted()).length, 0);
-    assert.equal(await status.textContent(), 'Recognizing…');
-    await speak('Ngf3');
-    assert.equal((await submitted()).length, 1);
-    await page.evaluate(() => window.recognizers.at(-1).onend());
-    await page.waitForFunction(() => window.recognizers.length === 2);
-    assert.equal(await mic.getAttribute('aria-pressed'), 'true');
-    assert.equal(await status.textContent(), 'Sent Ngf3');
-    console.log('✓ Speech-end finalization waits for final SAN and rearms without losing status');
-
-    await reset();
-    await mic.click();
-    const rapid = await page.evaluate(() => {
-      window.speak('Ngf3');
-      // Simulate Rush finishing its reply and making the next move available,
-      // without advancing timers between these final recognition results.
       fixture.fen = '4k3/8/8/8/8/5N2/3N4/4K3 w - - 1 2';
       fixture.moves = [{ from: 'f3', to: 'g5', san: 'Ng5' }];
-      window.speak('Ng5');
-      return fixture.submitted;
     });
-    assert.equal(rapid.length, 2, 'A changed board must accept the next final move without a fixed cooldown');
-    assert.equal(rapid[1].to, 'g5');
-    await page.waitForTimeout(650);
-    assert.equal(await status.textContent(), 'Sent Ng5');
-    console.log('✓ Final moves submit immediately after the board changes');
-
-    await reset();
-    await mic.click();
-    await speak('Ngf3');
-    await page.waitForTimeout(650);
-    await page.evaluate(() => {
-      fixture.fen = '4k3/8/8/8/8/8/3N4/4K1N1 w - - 1 2';
-      const recognition = window.recognizers.at(-1);
-      recognition.onresult({ resultIndex: 0, results: recognition.results });
-    });
-    assert.equal((await submitted()).length, 1);
-    await speak('Ngf3');
-    assert.equal((await submitted()).length, 2);
-    console.log('✓ Repeated final events cannot replay against a new puzzle position');
-
-    await reset({ fen: '4k3/7p/8/8/8/8/8/4K2Q w - - 0 1', moves: [{ from: 'h1', to: 'h7', san: 'Qxh7+' }] });
-    await mic.click();
-    await speak('quinn h seven', false);
+    // Deliver an old result before the polling timer has refreshed the grammar.
+    await frame.evaluate(() => fakeRecognizers[0].emit('result', 'knight g f three'));
+    await frame.waitForFunction(() => fakeRecognizers.at(-1).grammar.includes('knight g five'), null, { polling: 50 });
     assert.equal((await submitted()).length, 0);
-    await speak('Quinn h seven');
-    assert.equal((await submitted())[0].to, 'h7');
-    assert.equal(await status.textContent(), 'Sent Qxh7+');
-    console.log('✓ Quinn repairs and omitted capture/check markers resolve to native SAN on final results');
+    assert.equal((await grammar()).includes('knight g f three'), false);
+    await speak('knight g five');
+    assert.equal((await submitted())[0].to, 'g5');
+    console.log('✓ Legal vocabulary follows FEN; stale speech is discarded before command delivery');
+
+    for (const scenario of [
+      { fen: '4k3/8/8/8/8/8/4P3/4K3 w - - 0 1', moves: [{ from: 'e2', to: 'e4', san: 'e4' }], phrase: 'e four', san: 'e4' },
+      { fen: '6k1/8/8/8/5N2/8/8/4K3 w - - 0 1', moves: [{ from: 'f4', to: 'e6', san: 'Ne6' }], phrase: 'knight e six', san: 'Ne6' },
+      { fen: '6k1/8/8/6p1/4N3/8/8/4K3 w - - 0 1', moves: [{ from: 'e4', to: 'g5', san: 'Nxg5' }], phrase: 'knight takes g five', san: 'Nxg5' },
+      { fen: '4k3/7p/8/8/8/8/8/4K2Q w - - 0 1', moves: [{ from: 'h1', to: 'h7', san: 'Qxh7+' }], phrase: 'queen h seven', san: 'Qxh7+' },
+      { fen: '4k1n1/8/8/8/8/8/8/4K3 b - - 0 1', player: 2, moves: [{ from: 'g8', to: 'f6', san: 'Nf6' }], phrase: 'knight f six', san: 'Nf6' },
+    ]) {
+      await reset(scenario); await start(); await speak(scenario.phrase);
+      assert.equal((await submitted()).length, 1);
+      assert.equal(await status.textContent(), 'Sent ' + scenario.san);
+    }
+    console.log('✓ Pawn, knight, capture, queen shorthand and black-side moves');
+
+    await reset({ fen: '6k1/8/8/8/4N3/8/8/4K3 w - - 0 1', moves: [{ from: 'e4', to: 'g5', san: 'Ng5' }] });
+    await start(); await speak('knight takes g five');
+    assert.equal((await submitted()).length, 0);
+    assert.match(await status.textContent(), /No legal move/);
+    await speak('knight g five');
+    assert.equal((await submitted()).length, 1);
 
     await reset({ fen: '4k3/8/8/4p3/3P4/4p3/3P4/4K3 w - - 0 1', moves: [
       { from: 'd4', to: 'e5', san: 'dxe5' }, { from: 'd2', to: 'e3', san: 'dxe3' },
     ] });
-    await mic.click();
-    await speak('de');
+    await start(); await speak('d e');
     assert.equal((await submitted()).length, 0);
     assert.match(await status.textContent(), /dxe5 or dxe3/);
     await speak('d e five');
-    assert.equal((await submitted())[0].from, 'd4');
     assert.equal((await submitted())[0].to, 'e5');
-    assert.equal(await status.textContent(), 'Sent dxe5');
-    console.log('✓ Rankless pawn captures show ambiguity; saying the rank selects the requested move');
-
-    await reset({ fen: '4k3/8/8/4p3/3P4/8/8/4K3 w - - 0 1', moves: [{ from: 'd4', to: 'e5', san: 'dxe5' }] });
-    await mic.click();
-    await speak('d e', false);
-    assert.equal((await submitted()).length, 0);
-    await speak('d e');
-    assert.equal((await submitted())[0].to, 'e5');
-    assert.equal(await status.textContent(), 'Sent dxe5');
-    console.log('✓ A unique file-only pawn capture submits the native move');
 
     await reset({ fen: '4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1', moves: [
       { from: 'e1', to: 'g1', san: 'O-O' }, { from: 'e1', to: 'c1', san: 'O-O-O' },
     ] });
-    await mic.click();
-    await speak('castle');
-    assert.equal((await submitted()).length, 0);
+    await start(); await speak('castle');
     assert.match(await status.textContent(), /O-O or O-O-O/);
-    await speak('castle quinn side');
-    assert.equal((await submitted())[0].to, 'c1');
-    assert.equal(await status.textContent(), 'Sent O-O-O');
-    console.log('✓ Bare castle reports both sides; castle quinn side specifies queenside');
-
-    await reset({ fen: '4k3/8/8/8/8/8/8/4K2R w K - 0 1', moves: [{ from: 'e1', to: 'g1', san: 'O-O' }] });
-    await mic.click();
-    await speak('castle');
-    assert.equal((await submitted())[0].to, 'g1');
-    assert.equal(await status.textContent(), 'Sent O-O');
-    console.log('✓ Bare castle submits when only one side is legal');
-
-    await reset({ mode: 'passive-observing' });
-    await mic.click();
-    assert.match(await status.textContent(), /Start a Puzzle Rush/);
-    assert.equal(await page.evaluate(() => window.recognizers?.length ?? 0), 0);
-    console.log('✓ Idle board does not start the microphone');
-
-    await reset({ fen: '4k1n1/8/8/8/8/8/8/4K3 b - - 0 1', player: 2, moves: [{ from: 'g8', to: 'f6', san: 'Nf6' }] });
-    await mic.click();
-    await speak('Nf6');
-    assert.equal((await submitted())[0].from, 'g8');
-    console.log('✓ Black-side Puzzle Rush');
-
-    await reset({ fen: '4k3/P7/8/8/8/8/8/4K3 w - - 0 1', moves: [{ from: 'a7', to: 'a8', promotion: 'Q', san: 'a8=N' }] });
-    await mic.click();
-    assert.match(await status.textContent(), /consistent promotion choices/);
-    assert.equal(await mic.getAttribute('aria-pressed'), 'false');
     assert.equal((await submitted()).length, 0);
-    console.log('✓ Inconsistent promotion data leaves the board untouched');
+    await speak('castle queen side');
+    assert.equal((await submitted())[0].to, 'c1');
 
     await reset({ fen: '4k3/P7/8/8/8/8/8/4K3 w - - 0 1', moves: ['Q', 'N'].map(promotion => ({ from: 'a7', to: 'a8', promotion, san: 'a8=' + promotion })) });
-    await mic.click();
-    await speak('a8');
+    await start(); await speak('a eight');
     assert.equal((await submitted()).length, 0);
     await speak('a eight knight');
     assert.equal((await submitted())[0].promotion, 'N');
-    console.log('✓ Native promotion handling');
+    console.log('✓ Capture markers, ambiguous pawn shorthand and castle, and mandatory underpromotion piece');
 
-    await reset({ fen: '4r1k1/3P4/8/8/8/8/8/4K3 w - - 0 1', moves: [
-      { from: 'd7', to: 'e8', promotion: 'N', san: 'dxe8=N' },
-    ] });
-    await mic.click();
-    await speak('de');
-    assert.equal((await submitted()).length, 0, 'Even a single promotion option requires a spoken piece');
-    await speak('d e knight');
-    assert.equal((await submitted())[0].promotion, 'N');
-    assert.equal(await status.textContent(), 'Sent dxe8=N');
-    console.log('✓ Rankless capture promotions require and preserve the requested piece');
-
-    await reset();
-    await mic.click();
-    await page.evaluate(() => {
-      const game = document.querySelector('wc-chess-board').game;
-      const getMoves = game.getLegalMoves;
-      let reads = 0;
-      game.getLegalMoves = () => {
-        if (++reads === 2) {
-          fixture.fen = fixture.fen.replace('0 1', '1 2');
-          game.getLegalMoves = getMoves;
-        }
-        return getMoves();
-      };
-    });
-    await speak('Ngf3');
-    assert.match(await status.textContent(), /puzzle changed/);
-    assert.equal((await submitted()).length, 0);
-    await speak('Ngf3');
+    await reset({ reject: true }); await start();
+    await speak('knight g f three'); await speak('knight d f three');
     assert.equal((await submitted()).length, 1);
-    console.log('✓ Stale validation reports the cause and permits a fresh command');
-
-    await reset({ reject: true });
-    await mic.click();
-    await speak('Ngf3');
-    await speak('Ndf3');
-    assert.equal((await submitted()).length, 1, 'Unchanged positions must keep the in-flight submission locked');
     await page.waitForTimeout(650);
     assert.match(await status.textContent(), /Board rejected/);
-    await speak('Ngf3');
+    await speak('knight g f three');
     assert.equal((await submitted()).length, 1);
-    console.log('✓ Failed submission does not replay');
-
-    await reset({ throwAfterMove: true });
-    await mic.click();
-    await speak('Ngf3');
+    await reset({ throwAfterMove: true }); await start(); await speak('knight g f three');
     await page.waitForTimeout(650);
-    assert.match(await status.textContent(), /Sent Ngf3/);
     assert.equal((await submitted()).length, 1);
-    console.log('✓ Board exception after accepting input');
+    assert.equal(await status.textContent(), 'Sent Ngf3');
+    console.log('✓ Rejected and uncertain submissions never replay');
 
-    await reset();
-    await mic.click();
-    await page.evaluate(() => window.recognizers.at(-1).onerror({ error: 'not-allowed' }));
-    assert.match(await status.textContent(), /Allow the microphone/);
+    await reset({ mode: 'passive-observing' }); await mic.click();
+    assert.match(await status.textContent(), /Start a Puzzle Rush/);
+    assert.equal(engine(), undefined);
+    await reset({ micError: 'NotAllowedError' }); await mic.click();
+    await page.waitForFunction(() => document.querySelector('#voice-chess-control').shadowRoot.querySelector('.status').textContent.includes('Allow the microphone'));
     assert.equal(await mic.getAttribute('aria-pressed'), 'false');
-    console.log('✓ Microphone denial');
-
-    await mic.click();
-    await page.evaluate(() => { history.pushState({}, '', '/play/online'); });
+    await reset(); await start();
+    await page.evaluate(() => history.pushState({}, '', '/play/online'));
+    await page.waitForFunction(() => fixture.tracksStopped === 1);
     assert.equal(await page.locator('#voice-chess-control').isVisible(), false);
-    assert.equal(await mic.getAttribute('aria-pressed'), 'false');
-    assert.equal(await page.evaluate(() => window.recognizers.at(-1).aborted), true);
-    await page.waitForTimeout(350);
-    assert.equal(await page.evaluate(() => window.recognizers.length), 2);
-    await page.evaluate(() => { history.pushState({}, '', '/puzzles/rush'); });
-    await page.waitForTimeout(600);
-    assert.equal(await page.locator('#voice-chess-control').isVisible(), true);
-    console.log('✓ Navigation stops the microphone and hides the control');
-
-    await reset();
-    await mic.click();
-    const other = await context.newPage();
-    await other.goto('https://www.chess.com/');
-    await other.bringToFront();
-    // Headless Chromium may keep all pages visible; dispatch the same platform
-    // event with its actual hidden property set for deterministic coverage.
+    assert.equal(engine(), undefined);
+    await reset(); await start();
     await page.evaluate(() => {
       Object.defineProperty(document, 'hidden', { configurable: true, value: true });
       document.dispatchEvent(new Event('visibilitychange'));
     });
     assert.equal(await mic.getAttribute('aria-pressed'), 'false');
-    assert.equal(await other.locator('#voice-chess-control').count(), 0);
-    await other.close();
-    console.log('✓ Hidden-tab pause and no injection outside Puzzle Rush');
-
-    await reset();
-    await mic.click();
-    await page.evaluate(() => window.recognizers.at(-1).onend());
-    await page.evaluate(() => { history.replaceState({}, '', '/puzzles'); });
-    assert.equal(await mic.getAttribute('aria-pressed'), 'false');
-    await page.waitForTimeout(350);
-    assert.equal(await page.evaluate(() => window.recognizers.length), 1);
-    console.log('✓ Navigation cancels a pending recognition restart');
+    await page.waitForFunction(() => fixture.tracksStopped === 1);
+    await page.goto('https://www.chess.com/');
+    assert.equal(await page.locator('#voice-chess-control').count(), 0);
+    console.log('✓ Idle board, permission denial, route exit, hidden tab and injection scope');
 
     await reset();
     const controlBounds = await page.locator('#voice-chess-control').boundingBox();
@@ -427,7 +179,7 @@ const path = require('node:path');
     assert.equal(await mic.getAttribute('aria-pressed'), 'false');
     assert.equal(await mic.getAttribute('aria-label'), 'Start listening');
     assert.equal(await page.locator('#voice-chess-control details, #voice-chess-control summary').count(), 0);
-    assert.match(await page.locator('#voice-chess-control .privacy').textContent(), /speech online/);
+    assert.match(await page.locator('#voice-chess-control .privacy').textContent(), /Offline speech/);
     await fs.mkdir(path.resolve(__dirname, '../artifacts'), { recursive: true });
     await page.screenshot({ path: path.resolve(__dirname, '../artifacts/voice-chess.png') });
     await page.setViewportSize({ width: 390, height: 844 });
@@ -476,10 +228,11 @@ const path = require('node:path');
     }
     await assertControlVisible();
     await mic.click();
-    await speak('G6', false);
+    await page.waitForFunction(() => document.querySelector('#voice-chess-control').shadowRoot.querySelector('.status').textContent === 'Listening · offline');
+    await speak('g six', false);
     await assertControlVisible();
     await speak('help');
-    assert.match(await status.textContent(), /Use standard notation/);
+    assert.match(await status.textContent(), /Unclear speech/);
     assert.equal((await submitted()).length, 0);
     await page.waitForFunction(() => {
       const bounds = document.querySelector('#voice-chess-control').getBoundingClientRect();

@@ -13,7 +13,19 @@
     "default_title": "Voice Chess · Puzzle Rush",
     "default_popup": "popup.html"
   },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+  },
+  "web_accessible_resources": [{
+    "resources": ["recognizer.html"],
+    "matches": ["https://www.chess.com/*"]
+  }],
   "content_scripts": [{
+    "matches": ["https://www.chess.com/puzzles/rush", "https://www.chess.com/puzzles/rush/*", "https://www.chess.com/puzzles/rush?*"],
+    "js": ["bridge.js"],
+    "world": "ISOLATED",
+    "run_at": "document_idle"
+  }, {
     "matches": ["https://www.chess.com/puzzles/rush", "https://www.chess.com/puzzles/rush/*", "https://www.chess.com/puzzles/rush?*"],
     "js": ["commands.js", "board.js", "speech.js", "content.js"],
     "world": "MAIN",

@@ -141,23 +141,33 @@ const VoiceChessCommands = (() => {
     const ranks = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'];
     const say = square => Array.from(square).map(char => /[1-8]/.test(char) ? ranks[Number(char) - 1] : char).join(' ');
     for (const { notation } of unique) {
-      phrases.add(notation.san.replace(/[+#]$/, ''));
       if (notation.castle) {
         const side = notation.castle === 'king' ? 'king' : 'queen';
-        phrases.add(`castle ${side} side`);
-        phrases.add(side === 'king' ? 'short castle' : 'long castle');
-        if (unique.filter(entry => entry.notation.castle).length === 1) phrases.add('castle');
+        // Keep bare castle audible so the resolver can ask for a side.
+        for (const phrase of [`castle ${side} side`, side === 'king' ? 'short castle' : 'long castle', 'castle']) {
+          phrases.add(phrase);
+          if (notation.suffix) phrases.add(`${phrase} ${notation.suffix === '#' ? 'check mate' : 'check'}`);
+        }
         continue;
       }
-      const spoken = [names[notation.piece], notation.origin && say(notation.origin), notation.capture && 'takes', say(notation.to),
-        notation.promotion && `equals ${names[notation.promotion.toLowerCase()]}`].filter(Boolean).join(' ');
-      phrases.add(spoken);
-      if (notation.capture) phrases.add(spoken.replace(' takes ', ' '));
-      if (notation.promotion) phrases.add(spoken.replace('equals ', ''));
-      if (notation.suffix) phrases.add(`${spoken} ${notation.suffix === '#' ? 'checkmate' : 'check'}`);
-      if (notation.piece === 'p' && notation.capture && unique.filter(entry => entry.notation.piece === 'p' && entry.notation.origin === notation.origin &&
-        entry.notation.to[0] === notation.to[0] && entry.notation.promotion === notation.promotion).length === 1) {
-        phrases.add(`${notation.origin} ${notation.to[0]}${notation.promotion ? ' ' + names[notation.promotion.toLowerCase()] : ''}`);
+      const origins = [notation.origin];
+      // Keep missing/partial disambiguation audible; the resolver will ask
+      // which piece instead of letting a constrained recognizer supply it.
+      if (notation.piece !== 'p' && notation.origin) {
+        origins.push(undefined);
+        if (notation.origin.length === 2) origins.push(...notation.origin);
+      }
+      const destinations = [say(notation.to)];
+      if (notation.piece === 'p' && notation.capture) destinations.push(notation.to[0]);
+      const promotions = notation.promotion ? ['', names[notation.promotion.toLowerCase()], `equals ${names[notation.promotion.toLowerCase()]}`] : [''];
+      for (const origin of origins) for (const destination of destinations) for (const promotion of promotions) {
+        // Explicit takes on a non-capture and incomplete promotions are guard
+        // phrases: recognize them faithfully, then reject them in the parser.
+        for (const capture of ['', 'takes']) {
+          const spoken = [names[notation.piece], origin && say(origin), capture, destination, promotion].filter(Boolean).join(' ');
+          phrases.add(spoken);
+          if (notation.suffix) phrases.add(`${spoken} ${notation.suffix === '#' ? 'check mate' : 'check'}`);
+        }
       }
     }
     return [...phrases];

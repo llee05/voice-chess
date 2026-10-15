@@ -22,7 +22,7 @@
   window.fixture = {
     fen: '4k3/8/8/8/8/8/3N4/4K1N1 w - - 0 1',
     player: 1, mode: 'puzzle', animating: false, enabled: true, submitted: [], reject: false, throwAfterMove: false,
-    vocabulary: 'unavailable', installs: [], installResult: true,
+    micError: null, tracksStopped: 0, contextsClosed: 0,
     moves: [{ from: 'g1', to: 'f3', san: 'Ngf3' }, { from: 'd2', to: 'f3', san: 'Ndf3' }, { from: 'e1', to: 'f1', san: 'Kf1' }],
   };
   const symbols = { p: 'P', n: 'N', b: 'B', r: 'R', q: 'Q', k: 'K' };
@@ -78,29 +78,23 @@
       if (fixture.throwAfterMove) throw new Error('Thrown after dispatch');
     },
   };
-  window.SpeechRecognitionPhrase = class {
-    constructor(phrase, boost) { this.phrase = phrase; this.boost = boost; }
-  };
-  window.SpeechRecognition = class {
-    static async available() { return fixture.vocabulary; }
-    static async install(options) {
-      fixture.installs.push(options);
-      if (fixture.installResult) fixture.vocabulary = 'available';
-      return fixture.installResult;
-    }
-    constructor() { this.results = []; this.phrases = []; this.processLocally = false; window.recognizers ??= []; window.recognizers.push(this); }
-    start() { this.onstart?.(); }
-    stop() { this.stopCalls = (this.stopCalls ?? 0) + 1; }
-    abort() { this.aborted = true; this.onend?.(); }
-  };
-  window.speak = (text, final = true, alternatives = []) => {
-    const recognition = window.recognizers.at(-1);
-    const resultIndex = recognition.results.findIndex(result => !result.isFinal);
-    const index = resultIndex < 0 ? recognition.results.length : resultIndex;
-    const result = [text, ...alternatives].map(transcript => ({ transcript })); result.isFinal = final;
-    recognition.results.splice(index, recognition.results.length - index, result);
-    recognition.onresult({ resultIndex: index, results: recognition.results });
-  };
+  if (location.search.includes('capture=real')) {
+    const capture = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = async options => (window.capturedStream = await capture(options));
+  } else {
+    Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { value: async () => {
+      if (fixture.micError) throw Object.assign(new Error('Microphone error'), { name: fixture.micError });
+      const track = { stop() { fixture.tracksStopped++; } };
+      return { getTracks: () => [track], getAudioTracks: () => [track] };
+    } });
+    window.AudioContext = class {
+      constructor() { this.sampleRate = 16000; }
+      async resume() {}
+      createMediaStreamSource() { return { connect() {}, disconnect() {} }; }
+      createScriptProcessor() { return window.audioProcessor = { connect() {}, disconnect() {} }; }
+      async close() { fixture.contextsClosed++; }
+    };
+  }
   render();
 </script>
 </html>

@@ -5,7 +5,7 @@
   "description": "Minimal voice controls for Chess.com Puzzle Rush",
   "scripts": {
     "test": "node --test tests/*.test.cjs",
-    "test:browser": "node tests/browser.cjs",
+    "test:browser": "node tests/browser.cjs && node tests/vosk-browser.cjs",
     "check": "node scripts/check.cjs"
   },
   "engines": {
