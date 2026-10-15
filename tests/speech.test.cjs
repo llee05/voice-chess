@@ -3,23 +3,27 @@ const assert = require('node:assert/strict');
 const { load } = require('./helpers.cjs');
 const Speech = load('speech.js', 'VoiceChessSpeech');
 
-function fixture(Recognition, language) {
+function fixture(Recognition, language, vocabularyOptions = {}) {
   const instances = [];
   const tasks = new Map();
   const states = [], transcripts = [], commands = [];
   const alternatives = [];
+  const vocabularyStates = [];
   class FakeRecognition {
-    constructor() { instances.push(this); }
+    constructor() { instances.push(this); this.processLocally = false; this.phrases = []; }
     start() { this.onstart(); }
     stop() { this.stopCalls = (this.stopCalls ?? 0) + 1; }
     abort() { this.aborted = true; this.onend(); }
   }
+  if (vocabularyOptions.available) FakeRecognition.available = vocabularyOptions.available;
+  if (vocabularyOptions.install) FakeRecognition.install = vocabularyOptions.install;
   const timers = {
     setTimeout(callback, delay) { const id = Symbol(); tasks.set(id, Object.assign(callback, { delay })); return id; },
     clearTimeout(id) { tasks.delete(id); },
   };
   const session = new Speech({
     Recognition: Recognition === undefined ? FakeRecognition : Recognition, language,
+    Phrase: vocabularyOptions.Phrase, getPhrases: vocabularyOptions.getPhrases, onVocabulary: state => vocabularyStates.push(state),
     timers, onState: (...args) => states.push(args), onTranscript: text => transcripts.push(text),
     onCommand: (text, options) => { commands.push(text); alternatives.push(options); },
   });
@@ -29,8 +33,14 @@ function fixture(Recognition, language) {
     instances.at(-1).onresult({ resultIndex, results: [...prior, result] });
   }
   function runTasks() { const callbacks = [...tasks.values()]; tasks.clear(); callbacks.forEach(callback => callback()); }
-  return { session, instances, states, transcripts, commands, alternatives, tasks, emit, runTasks };
+  return { session, instances, states, transcripts, commands, alternatives, vocabularyStates, tasks, emit, runTasks };
 }
+
+function vocabularyFixture(options = {}) {
+  class Phrase { constructor(phrase, boost) { this.phrase = phrase; this.boost = boost; } }
+  return fixture(undefined, 'en-AU', { Phrase, available: async () => 'available', getPhrases: () => ['stop', 'knight f three'], ...options });
+}
+const settle = () => new Promise(resolve => setImmediate(resolve));
 
 test('starts only once and uses final results for moves', () => {
   const f = fixture();
@@ -271,4 +281,135 @@ test('handles a speech constructor failure without leaving the microphone active
   const f = fixture(BrokenRecognition);
   f.session.start();
   assert.equal(f.session.active, false);
+});
+
+test('uses an already installed local model and refreshes equally boosted legal phrases', async () => {
+  let phrases = ['stop', 'knight f three'];
+  const f = vocabularyFixture({ getPhrases: () => phrases });
+  f.session.start();
+  await settle();
+  const recognition = f.instances[0];
+  assert.equal(recognition.processLocally, true);
+  assert.match(f.states.at(-1)[1], /legal-move hints/);
+  assert.deepEqual(Array.from(recognition.phrases, hint => hint.phrase), phrases);
+  assert.ok(recognition.phrases.every(hint => hint.boost === 3));
+  const original = recognition.phrases;
+  f.session.refreshPhrases();
+  assert.equal(recognition.phrases, original, 'Unchanged vocabulary should not be reset');
+  phrases = ['stop', 'knight g five'];
+  f.session.refreshPhrases();
+  assert.deepEqual(Array.from(recognition.phrases, hint => hint.phrase), phrases);
+  assert.deepEqual(f.commands, []);
+});
+
+test('downloadable models keep ordinary recognition working without an automatic download', async () => {
+  let installs = 0;
+  const f = vocabularyFixture({ available: async () => 'downloadable', install: async () => { installs++; return true; } });
+  f.session.start();
+  await settle();
+  assert.equal(f.instances[0].processLocally, false);
+  assert.equal(f.instances[0].phrases.length, 0);
+  assert.equal(installs, 0);
+  assert.equal(f.vocabularyStates.at(-1), 'downloadable');
+  f.emit('Nf3');
+  assert.deepEqual(f.commands, ['Nf3']);
+});
+
+test('an explicit model download releases the mic and requires another click to listen', async () => {
+  let availability = 'downloadable';
+  const requests = [];
+  const f = vocabularyFixture({ available: async () => availability, install: async options => { requests.push(options); availability = 'available'; return true; } });
+  f.session.start();
+  await settle();
+  await f.session.installVocabulary();
+  assert.equal(f.instances[0].aborted, true);
+  assert.equal(f.session.active, false);
+  assert.equal(f.session.installing, false);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].langs[0], 'en-AU');
+  assert.equal(requests[0].processLocally, true);
+  assert.match(f.states.at(-1)[1], /Speech model ready/);
+  assert.equal(f.instances.length, 1);
+  f.session.start();
+  await settle();
+  assert.equal(f.instances[1].processLocally, true);
+});
+
+test('a failed model download leaves standard recognition available', async () => {
+  const f = vocabularyFixture({ available: async () => 'downloadable', install: async () => { throw new Error('Download failed'); } });
+  await f.session.installVocabulary();
+  assert.equal(f.session.installing, false);
+  assert.equal(f.vocabularyStates.at(-1), 'downloadable');
+  assert.match(f.states.at(-1)[1], /standard recognition/);
+  f.session.start();
+  await settle();
+  assert.equal(f.instances[0].processLocally, false);
+});
+
+test('model availability checks time out and ignore a late answer', async () => {
+  let finish;
+  const f = vocabularyFixture({ available: () => new Promise(resolve => { finish = resolve; }) });
+  f.session.start();
+  assert.equal([...f.tasks.values()][0].delay, 1000);
+  f.runTasks();
+  assert.equal(f.instances.length, 1);
+  assert.equal(f.instances[0].processLocally, false);
+  finish('available');
+  await settle();
+  assert.equal(f.instances.length, 1);
+  assert.equal(f.instances[0].processLocally, false);
+});
+
+test('stopping or starting a new session discards an earlier availability result', async () => {
+  const pending = [];
+  const f = vocabularyFixture({ available: () => new Promise(resolve => pending.push(resolve)), install: async () => true });
+  f.session.start();
+  f.session.stop();
+  assert.equal(f.tasks.size, 0);
+  f.session.start();
+  pending[0]('available');
+  await settle();
+  assert.equal(f.instances.length, 0);
+  pending[1]('downloadable');
+  await settle();
+  assert.equal(f.instances.length, 1);
+  assert.equal(f.instances[0].processLocally, false);
+});
+
+for (const error of ['phrases-not-supported', 'language-not-supported', 'service-not-allowed']) {
+  test(`a local ${error} error falls back once, without replaying speech`, async () => {
+    const f = vocabularyFixture();
+    f.session.start();
+    await settle();
+    const old = f.instances[0];
+    old.onerror({ error });
+    assert.equal(old.aborted, true);
+    assert.equal(f.session.active, true);
+    assert.equal([...f.tasks.values()][0].delay, 300);
+    f.emit('Nf3');
+    assert.deepEqual(f.commands, []);
+    f.runTasks();
+    assert.equal(f.instances.length, 2);
+    assert.equal(f.instances[1].processLocally, false);
+    assert.equal(f.instances[1].phrases.length, 0);
+    f.instances[1].onerror({ error });
+    assert.equal(f.session.active, false);
+    assert.equal(f.tasks.size, 0);
+  });
+}
+
+test('stop cancels a pending hint fallback, and permission denial never falls back', async () => {
+  const f = vocabularyFixture();
+  f.session.start();
+  await settle();
+  f.instances[0].onerror({ error: 'phrases-not-supported' });
+  f.session.stop();
+  f.runTasks();
+  assert.equal(f.instances.length, 1);
+  const denied = vocabularyFixture();
+  denied.session.start();
+  await settle();
+  denied.instances[0].onerror({ error: 'not-allowed' });
+  assert.equal(denied.session.active, false);
+  assert.equal(denied.tasks.size, 0);
 });

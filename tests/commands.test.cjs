@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { load, plain } = require('./helpers.cjs');
-const { parse, resolve, resolveAlternatives } = load('commands.js', 'VoiceChessCommands');
+const { parse, resolve, resolveAlternatives, vocabulary } = load('commands.js', 'VoiceChessCommands');
 
 for (const [text, san] of [
   ['e4', 'e4'], ['e5', 'e5'], ['E4', 'e4'], ['e four', 'e4'], ['e five', 'e5'],
@@ -309,4 +309,40 @@ test('quinn does not choose between ambiguous queens', () => {
   assert.equal(result.move, undefined);
   assert.match(result.error, /Qah4 or Qeh4/);
   assert.equal(resolve(parse('quinn a h four'), moves).move.from, 'a4');
+});
+
+test('legal-move vocabulary keeps disambiguation and explicit promotion in every move hint', () => {
+  const moves = [move('Ngf3', 'g1', 'f3'), move('Ndf3', 'd2', 'f3'), move('exd5', 'e4', 'd5'),
+    move('e8=N', 'e7', 'e8', { promotion: 'n' }), move('Bxe5+', 'b2', 'e5'),
+    move('O-O', 'e1', 'g1'), move('O-O-O', 'e1', 'c1')];
+  const phrases = vocabulary(moves);
+  for (const expected of ['knight g f three', 'knight d f three', 'e takes d five', 'e d five', 'e d',
+    'e eight equals knight', 'e eight knight', 'bishop takes e five check', 'short castle', 'castle queen side', 'stop']) {
+    assert.ok(phrases.includes(expected), `Missing legal phrase: ${expected}`);
+  }
+  for (const absent of ['knight f three', 'e eight', 'castle', 'queen h seven']) assert.equal(phrases.includes(absent), false);
+  for (const phrase of phrases) {
+    const command = parse(phrase);
+    assert.ok(command, `Unparseable hint: ${phrase}`);
+    if (command.kind === 'move') assert.ok(resolve(command, moves).move, `Hint must identify one legal move: ${phrase}`);
+  }
+  assert.equal(new Set(phrases).size, phrases.length);
+});
+
+test('rankless and castle hints are included only when they identify one legal move', () => {
+  assert.equal(vocabulary([move('dxe5', 'd4', 'e5'), move('dxe3', 'd2', 'e3')]).includes('d e'), false);
+  const castle = move('O-O', 'e1', 'g1');
+  assert.equal(vocabulary([castle, castle]).includes('castle'), true);
+  const promotions = ['Q', 'N'].map(piece => move('axb8=' + piece, 'a7', 'b8', { promotion: piece.toLowerCase() }));
+  assert.ok(vocabulary(promotions).includes('a b queen'));
+  assert.ok(vocabulary(promotions).includes('a b knight'));
+  assert.equal(vocabulary(promotions).includes('a b'), false);
+});
+
+test('missing or nonstandard legal SAN produces only stop controls, without invented hints', () => {
+  const controls = Array.from(vocabulary([]));
+  assert.ok(controls.length > 0);
+  assert.ok(controls.every(phrase => parse(phrase).kind === 'stop'));
+  assert.deepEqual(Array.from(vocabulary([{ from: 'g1', to: 'f3' }])), controls);
+  assert.deepEqual(Array.from(vocabulary([move('96', 'f4', 'e6')])), controls);
 });

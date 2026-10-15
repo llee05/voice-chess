@@ -17,12 +17,15 @@
       .status { color: #aeb2a5; font-size: 12px; margin-top: 2px; overflow-wrap: anywhere; }
       button { display: grid; place-items: center; flex: none; width: 40px; height: 40px; border: 1px solid #505348; border-radius: 50%; background: #34362f; color: #c8cdbb; cursor: pointer; }
       button:hover { background: #43473b; }
+      button:disabled { opacity: .65; cursor: default; }
+      button[hidden] { display: none; }
       button[aria-pressed="true"] { background: #c4dc97; border-color: #c4dc97; color: #242c18; }
       button:focus-visible { outline: 2px solid #c4dc97; outline-offset: 4px; }
       svg { width: 19px; height: 19px; }
       .transcript { margin: 0 14px 12px; color: #dce5ce; font-size: 13px; overflow-wrap: anywhere; }
       .transcript:empty { display: none; }
       .privacy { margin: 0; padding: 0 14px 12px; color: #969c8c; font-size: 11px; }
+      .vocabulary { width: auto; height: auto; margin: 0 14px 12px; padding: 6px 10px; border-radius: 6px; font: inherit; }
       @media (max-width: 400px) { :host { right: 12px; bottom: 12px; } .panel { width: min(260px, calc(100vw - 24px)); } }
     </style>
     <section class="panel" aria-label="Voice Chess">
@@ -33,6 +36,7 @@
         </button>
       </div>
       <div class="transcript"></div>
+      <button class="vocabulary" type="button" hidden title="Download Chrome’s English speech model for legal-move recognition hints">Download speech model</button>
       <p class="privacy">Your browser may process speech online.</p>
     </section>`;
   // Stay outside Chess.com's body containers, which may clip or transform children.
@@ -41,6 +45,7 @@
   const status = root.querySelector('.status');
   const transcript = root.querySelector('.transcript');
   const toggle = root.querySelector('button');
+  const vocabulary = root.querySelector('.vocabulary');
   let waitingPosition = null;
   let submitting = false;
   let lastSubmission = null;
@@ -49,6 +54,17 @@
 
   const speech = new VoiceChessSpeech({
     Recognition: window.SpeechRecognition ?? window.webkitSpeechRecognition,
+    Phrase: window.SpeechRecognitionPhrase,
+    getPhrases() {
+      try { return VoiceChessCommands.vocabulary(VoiceChessBoard.snapshot().moves); }
+      catch { return VoiceChessCommands.vocabulary([]); }
+    },
+    onVocabulary(state) {
+      vocabulary.hidden = !['downloadable', 'downloading'].includes(state);
+      vocabulary.disabled = state === 'downloading';
+      vocabulary.textContent = state === 'downloading' ? 'Downloading speech model…' : 'Download speech model';
+      toggle.disabled = speech.installing;
+    },
     language: navigator.languages?.find(language => /^en(?:-|$)/i.test(language)) ?? 'en-US',
     onState(active, message) {
       toggle.setAttribute('aria-pressed', String(active));
@@ -123,6 +139,7 @@
     lastSubmission = null;
     speech.start();
   });
+  vocabulary.addEventListener('click', () => speech.installVocabulary());
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && speech.active) speech.stop('Paused while this tab is hidden');
   });
@@ -174,6 +191,7 @@
   function checkRoute() {
     host.hidden = !isRush();
     if (host.hidden && speech.active) speech.stop();
+    if (!host.hidden && speech.active) speech.refreshPhrases();
     if (!host.hidden) placeControl();
   }
   checkRoute();

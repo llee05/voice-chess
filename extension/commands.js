@@ -132,5 +132,36 @@ const VoiceChessCommands = (() => {
     return { error: error ?? 'Use standard notation or shorthand: Nf3, “d e”, or “castle”.' };
   }
 
-  return Object.freeze({ parse, resolve, resolveAlternatives });
+  function vocabulary(legalMoves) {
+    const phrases = new Set(['stop', 'pause', 'stop listening', 'pause listening', 'microphone off']);
+    const entries = legalMoves.map(move => ({ move, notation: readSan(move.san ?? '') }));
+    if (entries.some(entry => !entry.notation)) return [...phrases];
+    const unique = entries.filter(({ move }, index) => entries.findIndex(entry => entry.move.from === move.from && entry.move.to === move.to && entry.move.promotion === move.promotion) === index);
+    const names = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight' };
+    const ranks = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'];
+    const say = square => Array.from(square).map(char => /[1-8]/.test(char) ? ranks[Number(char) - 1] : char).join(' ');
+    for (const { notation } of unique) {
+      phrases.add(notation.san.replace(/[+#]$/, ''));
+      if (notation.castle) {
+        const side = notation.castle === 'king' ? 'king' : 'queen';
+        phrases.add(`castle ${side} side`);
+        phrases.add(side === 'king' ? 'short castle' : 'long castle');
+        if (unique.filter(entry => entry.notation.castle).length === 1) phrases.add('castle');
+        continue;
+      }
+      const spoken = [names[notation.piece], notation.origin && say(notation.origin), notation.capture && 'takes', say(notation.to),
+        notation.promotion && `equals ${names[notation.promotion.toLowerCase()]}`].filter(Boolean).join(' ');
+      phrases.add(spoken);
+      if (notation.capture) phrases.add(spoken.replace(' takes ', ' '));
+      if (notation.promotion) phrases.add(spoken.replace('equals ', ''));
+      if (notation.suffix) phrases.add(`${spoken} ${notation.suffix === '#' ? 'checkmate' : 'check'}`);
+      if (notation.piece === 'p' && notation.capture && unique.filter(entry => entry.notation.piece === 'p' && entry.notation.origin === notation.origin &&
+        entry.notation.to[0] === notation.to[0] && entry.notation.promotion === notation.promotion).length === 1) {
+        phrases.add(`${notation.origin} ${notation.to[0]}${notation.promotion ? ' ' + names[notation.promotion.toLowerCase()] : ''}`);
+      }
+    }
+    return [...phrases];
+  }
+
+  return Object.freeze({ parse, resolve, resolveAlternatives, vocabulary });
 })();

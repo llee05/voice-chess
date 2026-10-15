@@ -50,6 +50,12 @@ Only final recognition results trigger moves. The move must match the board's ow
 
 Recognition uses the browser's first preferred English locale (for example, `en-AU`), falling back to `en-US`. It [requests up to five transcript alternatives](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition/maxAlternatives) per final utterance, though the speech service may return fewer. A move can be recovered from an alternative when the matching candidates identify one legal move. If candidates point to different legal moves, or a candidate leaves the source piece ambiguous, the status shows the SAN choices and asks you to repeat. When an alternative is used, the transcript shows “original → accepted”. A possible “stop” command in any returned alternative turns off the microphone.
 
+Where supported, Voice Chess uses an installed local English speech model and supplies [phrase hints](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition/phrases) built from the board's current legal SAN. Hints include spoken moves, unambiguous pawn shorthand, castling, and stop controls. They preserve required source disambiguation and explicit promotion pieces, give every phrase the same boost, and refresh as the position changes. No puzzle solution or preferred move is supplied to the recognizer.
+
+If Chrome reports that the model can be downloaded, a **Download speech model** button appears after you start the mic. This is optional: ordinary recognition works without downloading a model. Clicking the button releases the mic and asks Chrome to download the model for your preferred English locale. After the download, click the mic again to enable move hints. Voice Chess never starts a model download automatically. Unsupported or failed local recognition falls back once to standard recognition and asks you to repeat the move; permission denial still stops the mic.
+
+Phrase hints encourage the vocabulary rather than restrict the speech engine to an exclusive list. The deprecated [grammar API has no effect on recognition services](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition/grammars). The final accepted move must always pass the extension's legal-SAN checks, including when hints are unavailable. Actual hint support depends on the browser and installed model; automated tests do not establish a real microphone accuracy improvement.
+
 Recognition handles one utterance at a time and [requests finalization when the browser detects the end of speech](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition/stop). The status shows “Recognizing…” while the final transcript is pending. Only a final result can submit a move; recognition rearms after 50 ms when an utterance completes. Actual recognition latency still depends on the browser's speech service.
 
 Final moves submit immediately when the board is ready. Once the position changes, the next final command can submit without a fixed pause between moves. An unchanged position remains protected against overlapping submissions.
@@ -59,6 +65,8 @@ The mic stays armed between moves and puzzles. A speech-service disconnection wi
 ## Privacy and troubleshooting
 
 Audio recognition uses the browser's [Web Speech API](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition). Chrome may send audio to its speech service, so an internet connection can be required. Voice Chess does not record audio, persist transcripts, or send data to a backend. The latest transcript is displayed only in memory on the page.
+
+Local-model recognition runs on the device when available, but standard recognition and fallback may still process audio online. Optional model downloads are handled by Chrome and require a network connection and local disk space; no model files are bundled with the extension.
 
 The extension declares no additional API permissions and injects scripts only on the standard `https://www.chess.com/puzzles/rush` route. The content scripts run in the [page's JavaScript world](https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts) to reach its board API. The toolbar popup opens Puzzle Rush; microphone permission is requested on the puzzle page after you click the control.
 
@@ -81,7 +89,7 @@ npm run check
 npm run test:browser
 ```
 
-Set `CHROMIUM_PATH` if Chromium is not at `/usr/bin/chromium`. Playwright is a development-only dependency; browser tests load the actual unpacked extension on an intercepted Chess.com URL. They cover SAN and shorthand delivery, transcript alternatives and conflicts, number homophones, English locale selection, ambiguous pawn captures and castling, duplicate speech events, stale positions, black-side puzzles, underpromotion, microphone denial, failed submissions, navigation, hidden-tab cleanup, keyboard access, narrow or short viewports, and page containers that clip overflow. These checks simulate recognition results; they do not measure real microphone accuracy. The visual screenshot is saved to `artifacts/voice-chess.png` and clearly labels the local test board.
+Set `CHROMIUM_PATH` if Chromium is not at `/usr/bin/chromium`. Playwright is a development-only dependency; browser tests load the actual unpacked extension on an intercepted Chess.com URL. They cover SAN and shorthand delivery, transcript alternatives and conflicts, number homophones, English locale selection, changing legal-move hints, opt-in model setup and fallback, ambiguous pawn captures and castling, duplicate speech events, stale positions, black-side puzzles, underpromotion, microphone denial, failed submissions, navigation, hidden-tab cleanup, keyboard access, narrow or short viewports, and page containers that clip overflow. These checks simulate recognition results and model installation; they do not download a model or measure real microphone accuracy. The visual screenshot is saved to `artifacts/voice-chess.png` and clearly labels the local test board.
 
 `npm run check` validates Puzzle Rush injection scope, content script order and syntax, permissions, version alignment, and packaged icon dimensions.
 
