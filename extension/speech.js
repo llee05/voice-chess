@@ -116,11 +116,11 @@ const VoiceChessSpeech = class {
     // the parser then enforces legality and ambiguity against native SAN.
     if (!this.phrases.has(text)) this.onState(true, 'Unclear speech. Say one move again.');
     // A legal move cannot reveal a misheard file. Require confidence in each
-    // a/f token rather than correcting one file to the other or guessing a move.
-    else if (text.split(' ').some((word, index) => /^[af]$/.test(word) &&
+    // commonly confused file token rather than substituting or guessing a move.
+    else if (text.split(' ').some((word, index) => /^[acefg]$/.test(word) &&
       (!Array.isArray(message.words) || message.words[index]?.word !== word ||
         !Number.isFinite(message.words[index]?.conf) || message.words[index].conf < 0.8 || message.words[index].conf > 1))) {
-      this.onState(true, 'Unclear a/f file. Say the move again with a distinct file letter.');
+      this.onState(true, 'Unclear file letter. Say the move again with a distinct file letter.');
     }
     else this.onCommand(text);
     // Consume one final per recognizer, discarding buffered and late speech.

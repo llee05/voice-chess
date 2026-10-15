@@ -91,17 +91,18 @@ test('rejects unknown words, recombined phrases, filler and multiple moves', asy
   assert.deepEqual(f.commands, ['queen h seven']);
 });
 
-test('uncertain a/f files require repetition without substituting another move', async () => {
+test('uncertain a/c/e/f/g files require repetition without substituting another move', async () => {
   const f = fixture();
-  f.vocabulary({ key: 1, phrases: ['a four', 'f four', 'knight a f three', 'queen h seven', 'stop'] });
+  const files = ['a', 'c', 'e', 'f', 'g'];
+  f.vocabulary({ key: 1, phrases: [...files.map(file => `${file} four`), ...files.map(file => `knight ${file} h three`), 'queen h seven', 'stop'] });
   await f.session.start(); f.ready();
   const result = (text, words) => f.emit('result', text, f.session.epoch, f.connections.at(-1), words);
-  for (const file of ['a', 'f']) {
+  for (const file of files) {
     for (const confidence of [0, 0.79, NaN, Infinity, '0.99', 1.1]) {
       const epoch = f.session.epoch;
       result(`${file} four`, [{ word: file, conf: confidence }, { word: 'four', conf: 1 }]);
       assert.deepEqual(f.commands, []);
-      assert.match(f.states.at(-1)[1], /Unclear a\/f file/);
+      assert.match(f.states.at(-1)[1], /Unclear file letter/);
       assert.notEqual(f.session.epoch, epoch, 'Rejected speech consumes the recognizer');
       f.emit('ready');
     }
@@ -112,14 +113,16 @@ test('uncertain a/f files require repetition without substituting another move',
     f.emit('ready');
   }
   // Disambiguation files need the same protection as destination files.
-  result('knight a f three', [{ word: 'knight', conf: 1 }, { word: 'a', conf: 0.7 }, { word: 'f', conf: 1 }, { word: 'three', conf: 1 }]);
-  assert.deepEqual(f.commands, []);
-  f.emit('ready');
-  for (const file of ['a', 'f']) {
+  for (const file of files) {
+    result(`knight ${file} h three`, [{ word: 'knight', conf: 1 }, { word: file, conf: 0.7 }, { word: 'h', conf: 1 }, { word: 'three', conf: 1 }]);
+    assert.deepEqual(f.commands, []);
+    f.emit('ready');
+  }
+  for (const file of files) {
     result(`${file} four`, [{ word: file, conf: 0.8 }, { word: 'four', conf: 1 }]);
     f.emit('ready');
   }
-  assert.deepEqual(f.commands, ['a four', 'f four']);
+  assert.deepEqual(f.commands, files.map(file => `${file} four`));
   result('stop', [{ word: 'stop', conf: 0.3 }]);
   assert.equal(f.commands.at(-1), 'stop', 'File guard must not interfere with stop commands');
 });

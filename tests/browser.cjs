@@ -106,12 +106,27 @@ const path = require('node:path');
     await start();
     await speak('a four', true, [{ word: 'a', conf: 0.6 }, { word: 'four', conf: 1 }]);
     assert.equal((await submitted()).length, 0);
-    assert.match(await status.textContent(), /Unclear a\/f file/);
+    assert.match(await status.textContent(), /Unclear file letter/);
     await speak('f four');
     assert.equal((await submitted()).length, 1);
     assert.equal((await submitted())[0].to, 'f4');
     assert.equal(await status.textContent(), 'Sent f4');
     console.log('✓ Uncertain a/f recognition leaves both legal moves untouched; a clear repeat submits f4');
+
+    await reset({ fen: '4k3/8/8/8/8/8/2P1P1P1/4K3 w - - 0 1', moves: [
+      { from: 'c2', to: 'c4', san: 'c4' }, { from: 'e2', to: 'e4', san: 'e4' }, { from: 'g2', to: 'g4', san: 'g4' },
+    ] });
+    await start();
+    for (const file of ['e', 'c', 'g']) {
+      await speak(`${file} four`, true, [{ word: file, conf: 0.6 }, { word: 'four', conf: 1 }]);
+      assert.equal((await submitted()).length, 0);
+      assert.match(await status.textContent(), /Unclear file letter/);
+    }
+    await speak('g four');
+    assert.equal((await submitted()).length, 1);
+    assert.equal((await submitted())[0].to, 'g4');
+    assert.equal(await status.textContent(), 'Sent g4');
+    console.log('✓ Uncertain e/c/g files require repetition; a clear repeat submits g4');
 
     await reset({ fen: '6k1/8/8/8/4N3/8/8/4K3 w - - 0 1', moves: [{ from: 'e4', to: 'g5', san: 'Ng5' }] });
     await start(); await speak('knight takes g five');
