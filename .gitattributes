@@ -1,0 +1,2 @@
+# Preserve upstream formatting and licenses in the pinned third-party bundle.
+extension/vendor/** -whitespace linguist-vendored
