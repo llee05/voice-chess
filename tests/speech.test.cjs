@@ -31,8 +31,8 @@ function fixture(options = {}) {
     onState: (...args) => states.push(args), onTranscript: text => transcripts.push(text),
     onCommand(text) { commands.push(text); if (options.command) options.command(session, text); },
   });
-  function emit(type, text, epoch = session.epoch, connection = connections.at(-1)) {
-    connection.port.onmessage({ data: { type, text, epoch } });
+  function emit(type, text, epoch = session.epoch, connection = connections.at(-1), words = text?.split(' ').map(word => ({ word, conf: 1 }))) {
+    connection.port.onmessage({ data: { type, text, epoch, words } });
   }
   function ready() { emit('loaded'); emit('ready'); }
   return { session, commands, states, transcripts, contexts, connections, tasks, track, stream, emit, ready,
@@ -89,6 +89,39 @@ test('rejects unknown words, recombined phrases, filler and multiple moves', asy
   assert.match(f.states.at(-1)[1], /Unclear speech/);
   f.emit('result', 'queen h seven');
   assert.deepEqual(f.commands, ['queen h seven']);
+});
+
+test('uncertain a/f files require repetition without substituting another move', async () => {
+  const f = fixture();
+  f.vocabulary({ key: 1, phrases: ['a four', 'f four', 'knight a f three', 'queen h seven', 'stop'] });
+  await f.session.start(); f.ready();
+  const result = (text, words) => f.emit('result', text, f.session.epoch, f.connections.at(-1), words);
+  for (const file of ['a', 'f']) {
+    for (const confidence of [0, 0.79, NaN, Infinity, '0.99', 1.1]) {
+      const epoch = f.session.epoch;
+      result(`${file} four`, [{ word: file, conf: confidence }, { word: 'four', conf: 1 }]);
+      assert.deepEqual(f.commands, []);
+      assert.match(f.states.at(-1)[1], /Unclear a\/f file/);
+      assert.notEqual(f.session.epoch, epoch, 'Rejected speech consumes the recognizer');
+      f.emit('ready');
+    }
+  }
+  for (const words of [null, [], [{ word: 'f', conf: 1 }, { word: 'four', conf: 1 }], [{ word: 'a' }]]) {
+    result('a four', words);
+    assert.deepEqual(f.commands, []);
+    f.emit('ready');
+  }
+  // Disambiguation files need the same protection as destination files.
+  result('knight a f three', [{ word: 'knight', conf: 1 }, { word: 'a', conf: 0.7 }, { word: 'f', conf: 1 }, { word: 'three', conf: 1 }]);
+  assert.deepEqual(f.commands, []);
+  f.emit('ready');
+  for (const file of ['a', 'f']) {
+    result(`${file} four`, [{ word: file, conf: 0.8 }, { word: 'four', conf: 1 }]);
+    f.emit('ready');
+  }
+  assert.deepEqual(f.commands, ['a four', 'f four']);
+  result('stop', [{ word: 'stop', conf: 0.3 }]);
+  assert.equal(f.commands.at(-1), 'stop', 'File guard must not interfere with stop commands');
 });
 
 test('stop commands close microphone, audio nodes and recognizer connection', async () => {

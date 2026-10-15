@@ -16,11 +16,12 @@
         epoch = configuration.epoch;
         pending = 0;
         const current = recognizer = new model.KaldiRecognizer(sampleRate, JSON.stringify([...phrases, '[unk]']));
+        current.setWords(true);
         const currentEpoch = epoch;
         current.on('result', message => {
           if (recognizer !== current) return;
           pending = Math.max(0, pending - 1);
-          port.postMessage({ type: 'result', epoch: currentEpoch, text: message.result?.text ?? '' });
+          port.postMessage({ type: 'result', epoch: currentEpoch, text: message.result?.text ?? '', words: message.result?.result });
         });
         current.on('partialresult', message => {
           if (recognizer !== current) return;

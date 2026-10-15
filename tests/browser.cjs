@@ -35,13 +35,13 @@ const path = require('node:path');
       await mic.click();
       await page.waitForFunction(() => document.querySelector('#voice-chess-control').shadowRoot.querySelector('.status').textContent === 'Listening · offline');
     }
-    async function speak(text, final = true) {
+    async function speak(text, final = true, words) {
       const frame = engine();
-      const count = await frame.evaluate(({ text, final }) => {
+      const count = await frame.evaluate(({ text, final, words }) => {
         const count = fakeRecognizers.length;
-        fakeRecognizers.at(-1).emit(final ? 'result' : 'partialresult', text);
+        fakeRecognizers.at(-1).emit(final ? 'result' : 'partialresult', text, words);
         return count;
-      }, { text, final });
+      }, { text, final, words });
       if (final && ['stop', 'pause', 'stop listening'].includes(text)) {
         await page.waitForFunction(() => document.querySelector('#voice-chess-control').shadowRoot.querySelector('button').getAttribute('aria-pressed') === 'false');
       } else if (final) await frame.waitForFunction(count => fakeRecognizers.length > count, count, { polling: 50 });
@@ -99,6 +99,19 @@ const path = require('node:path');
       assert.equal(await status.textContent(), 'Sent ' + scenario.san);
     }
     console.log('✓ Pawn, knight, capture, queen shorthand and black-side moves');
+
+    await reset({ fen: '4k3/8/8/8/8/8/P4P2/4K3 w - - 0 1', moves: [
+      { from: 'a2', to: 'a4', san: 'a4' }, { from: 'f2', to: 'f4', san: 'f4' },
+    ] });
+    await start();
+    await speak('a four', true, [{ word: 'a', conf: 0.6 }, { word: 'four', conf: 1 }]);
+    assert.equal((await submitted()).length, 0);
+    assert.match(await status.textContent(), /Unclear a\/f file/);
+    await speak('f four');
+    assert.equal((await submitted()).length, 1);
+    assert.equal((await submitted())[0].to, 'f4');
+    assert.equal(await status.textContent(), 'Sent f4');
+    console.log('✓ Uncertain a/f recognition leaves both legal moves untouched; a clear repeat submits f4');
 
     await reset({ fen: '6k1/8/8/8/4N3/8/8/4K3 w - - 0 1', moves: [{ from: 'e4', to: 'g5', san: 'Ng5' }] });
     await start(); await speak('knight takes g five');

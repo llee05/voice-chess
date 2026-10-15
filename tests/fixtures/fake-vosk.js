@@ -5,7 +5,10 @@ if (location.protocol === 'chrome-extension:') {
   class Recognizer {
     constructor(rate, grammar) { this.sampleRate = rate; this.grammar = JSON.parse(grammar); this.listeners = {}; window.fakeRecognizers.push(this); }
     on(type, listener) { this.listeners[type] = listener; }
-    emit(type, text) { this.listeners[type]?.({ result: type === 'result' ? { text } : { partial: text } }); }
+    setWords(enabled) { this.words = enabled; }
+    emit(type, text, words = text.split(' ').map(word => ({ word, conf: 1 }))) {
+      this.listeners[type]?.({ result: type === 'result' ? { text, result: this.words ? words : undefined } : { partial: text } });
+    }
     remove() { this.removed = true; }
     acceptWaveformFloat() {}
   }

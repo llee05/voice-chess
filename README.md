@@ -45,6 +45,8 @@ Vosk runs locally in a worker with a vocabulary derived from **all current legal
 
 Vosk's constrained language model can still mishear speech or recombine words. Unknown results and transcripts outside the complete supplied phrase list are rejected. Only final results can submit a move; interim text is display only. A final result consumes its recognizer, and buffered or late results are discarded before the next command. Position changes invalidate pending speech even when the legal vocabulary happens to be identical.
 
+Because “a” and “f” can be confused, a final move containing either file letter requires a reported word confidence of at least 0.8 for each occurrence. Otherwise the control asks you to repeat and leaves the board untouched. This catches uncertain readings; a confidently misheard letter can still pass. No file is automatically substituted.
+
 Immediately before submission, the extension rechecks the board instance, FEN, player turn, and requested move. Idle, disabled, animating, finished, and opponent-turn boards block moves. The board's own ordinary input handler processes the request. A legal move can still be an incorrect puzzle answer: Chess.com decides that. Rejected or uncertain submissions are never automatically replayed.
 
 The microphone stays armed between moves and puzzles. It switches off when you hide the tab, navigate away from Puzzle Rush, click the button, or say “stop”. Stopping releases the microphone, audio context, recognizer frame and worker, including during model startup. Return to the tab and click the mic to resume. Microphone and model failures stop listening with a status message; there is no automatic service fallback or retry loop.
