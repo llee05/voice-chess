@@ -8,6 +8,7 @@ const VoiceChessCommands = (() => {
     takes: 'x', captures: 'x', equals: '=', check: '+', checkmate: '#',
     zero: 'O', oh: 'O',
   };
+  const rankHomophones = { won: '1', to: '2', too: '2', for: '4', fore: '4', ate: '8' };
 
   function readSan(input) {
     if (typeof input !== 'string') return null;
@@ -56,8 +57,15 @@ const VoiceChessCommands = (() => {
       const suffix = words[castle[3]?.replace(' ', '')] ?? castle[3] ?? '';
       return { kind: 'move', san: (side ? (/^(kingside|short)$/.test(side) ? 'O-O' : 'O-O-O') : 'castle') + suffix };
     }
-    let notation = text.replace(/check mate/gi, 'checkmate').split(/\s+/)
-      .map(token => words[token.toLowerCase()] ?? token).join('');
+    const tokens = text.replace(/check mate/gi, 'checkmate').split(/\s+/)
+      .map(token => words[token.toLowerCase()] ?? token);
+    // Recognizers often spell ranks as homophones. Only repair a destination
+    // rank, so "knight to f three" and source/destination commands stay invalid.
+    for (let index = 1; index < tokens.length; index++) {
+      const rank = rankHomophones[tokens[index].toLowerCase()];
+      if (rank && /[a-h]$/i.test(tokens[index - 1]) && /^(?:=?[qrbn])?[+#]?$/i.test(tokens.slice(index + 1).join(''))) tokens[index] = rank;
+    }
+    let notation = tokens.join('');
     // A lowercase b followed by two squares/ranks is a coordinate command or
     // multiple pawn moves, not an instruction to move a rank-disambiguated bishop.
     if (/^b[1-8]x?[a-h][1-8][+#]?$/i.test(notation) && notation[0] === 'b') return null;
@@ -90,12 +98,34 @@ const VoiceChessCommands = (() => {
     // Some board versions repeat the same move in the legal-move collection.
     candidates = candidates.filter((move, index, all) => all.findIndex(other => other.from === move.from && other.to === move.to && other.promotion === move.promotion) === index);
     if (candidates.length === 1) return { move: candidates[0] };
-    if (candidates.length > 1) return { error: `Ambiguous move. Use ${[...new Set(candidates.map(move => move.san))].join(' or ')}.` };
-    const alternatives = [...new Set(matches.filter(({ move }) => !requested.castle && requested.piece !== 'p' &&
-      (!requested.origin || move.from.includes(requested.origin))).map(({ move }) => move.san))];
-    if (alternatives.length > 1) return { error: `Ambiguous move. Use ${alternatives.join(' or ')}.` };
+    if (candidates.length > 1) return { error: `Ambiguous move. Use ${[...new Set(candidates.map(move => move.san))].join(' or ')}.`, choices: candidates };
+    const alternatives = matches.filter(({ move }) => !requested.castle && requested.piece !== 'p' &&
+      (!requested.origin || move.from.includes(requested.origin))).map(({ move }) => move);
+    const choices = [...new Set(alternatives.map(move => move.san))];
+    if (choices.length > 1) return { error: `Ambiguous move. Use ${choices.join(' or ')}.`, choices: alternatives };
     return { error: `No legal move matches ${requested.san}. Use standard notation.` };
   }
 
-  return Object.freeze({ parse, resolve });
+  function resolveAlternatives(transcripts, legalMoves) {
+    const candidates = [];
+    let error;
+    for (const transcript of transcripts.slice(0, 5)) {
+      const command = parse(transcript);
+      if (command?.kind !== 'move') continue;
+      const result = resolve(command, legalMoves);
+      if (result.error) error ??= result.error;
+      // Include every move from ambiguous shorthand. A clearer alternative must
+      // not silently choose a source piece that another hypothesis left open.
+      for (const move of result.move ? [result.move] : result.choices ?? []) {
+        if (!candidates.some(candidate => candidate.move.from === move.from && candidate.move.to === move.to && candidate.move.promotion === move.promotion)) {
+          candidates.push({ move, transcript });
+        }
+      }
+    }
+    if (candidates.length === 1) return candidates[0];
+    if (candidates.length > 1) return { error: `Unclear speech. Say ${[...new Set(candidates.map(candidate => candidate.move.san))].join(' or ')}.` };
+    return { error: error ?? 'Use standard notation or shorthand: Nf3, “d e”, or “castle”.' };
+  }
+
+  return Object.freeze({ parse, resolve, resolveAlternatives });
 })();

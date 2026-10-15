@@ -83,11 +83,11 @@
     stop() { this.stopCalls = (this.stopCalls ?? 0) + 1; }
     abort() { this.aborted = true; this.onend?.(); }
   };
-  window.speak = (text, final = true) => {
+  window.speak = (text, final = true, alternatives = []) => {
     const recognition = window.recognizers.at(-1);
     const resultIndex = recognition.results.findIndex(result => !result.isFinal);
     const index = resultIndex < 0 ? recognition.results.length : resultIndex;
-    const result = [{ transcript: text }]; result.isFinal = final;
+    const result = [text, ...alternatives].map(transcript => ({ transcript })); result.isFinal = final;
     recognition.results.splice(index, recognition.results.length - index, result);
     recognition.onresult({ resultIndex: index, results: recognition.results });
   };

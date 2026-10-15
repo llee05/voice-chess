@@ -17,6 +17,7 @@ const path = require('node:path');
       ignoreDefaultArgs: ['--disable-extensions'],
       args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`],
       viewport: { width: 1280, height: 800 },
+      locale: 'en-AU',
     });
     await context.route('https://www.chess.com/**', route => route.fulfill({ contentType: 'text/html', body: fixture }));
     const page = await context.newPage();
@@ -28,7 +29,7 @@ const path = require('node:path');
     }
     const mic = page.locator('#voice-chess-control button');
     const status = page.locator('#voice-chess-control .status');
-    const speak = (text, final = true) => page.evaluate(({ text, final }) => window.speak(text, final), { text, final });
+    const speak = (text, final = true, alternatives = []) => page.evaluate(({ text, final, alternatives }) => window.speak(text, final, alternatives), { text, final, alternatives });
     const submitted = () => page.evaluate(() => window.fixture.submitted);
 
     await reset();
@@ -60,6 +61,48 @@ const path = require('node:path');
     assert.equal((await submitted())[0].to, 'e4');
     assert.equal(await status.textContent(), 'Sent e4');
     console.log('✓ Pawn SAN without a source square');
+
+    await reset({ fen: '4k3/8/8/8/8/8/8/4K1N1 w - - 0 1', moves: [{ from: 'g1', to: 'f3', san: 'Nf3' }] });
+    await mic.click();
+    assert.equal(await page.evaluate(() => window.recognizers.at(-1).lang), 'en-AU');
+    assert.equal(await page.evaluate(() => window.recognizers.at(-1).maxAlternatives), 5);
+    await speak('nice f tree', false, ['knight f three']);
+    assert.equal((await submitted()).length, 0);
+    await speak('nice f tree', true, ['knight f three', 'Nf3']);
+    assert.equal((await submitted())[0].to, 'f3');
+    assert.equal(await status.textContent(), 'Sent Nf3');
+    assert.equal(await page.locator('#voice-chess-control .transcript').textContent(), 'nice f tree → knight f three');
+    await page.evaluate(() => {
+      fixture.fen = '4k3/8/8/8/8/5N2/8/4K3 w - - 1 2';
+      fixture.moves = [{ from: 'f3', to: 'g5', san: 'Ng5' }];
+      const recognition = window.recognizers.at(-1);
+      recognition.onresult({ resultIndex: 0, results: recognition.results });
+    });
+    assert.equal((await submitted()).length, 1);
+    await speak('night g five');
+    assert.equal((await submitted()).length, 2);
+    console.log('✓ Preferred English locale, final transcript alternatives, visible correction, and no replay');
+
+    await reset({ fen: '4k3/8/8/8/8/8/3PP3/4K3 w - - 0 1', moves: [
+      { from: 'e2', to: 'e4', san: 'e4' }, { from: 'd2', to: 'd4', san: 'd4' },
+    ] });
+    await mic.click();
+    await speak('e for', true, ['d four']);
+    assert.equal((await submitted()).length, 0);
+    assert.match(await status.textContent(), /e4 or d4/);
+    await speak('e for');
+    assert.equal((await submitted())[0].to, 'e4');
+    console.log('✓ Destination-rank homophones work; conflicting legal transcripts require repetition');
+
+    await reset();
+    await mic.click();
+    await speak('knight g f three', true, ['knight f three']);
+    assert.equal((await submitted()).length, 0);
+    assert.match(await status.textContent(), /Ngf3 or Ndf3/);
+    await speak('knight g f three', true, ['stop']);
+    assert.equal((await submitted()).length, 0);
+    assert.equal(await mic.getAttribute('aria-pressed'), 'false');
+    console.log('✓ Alternative transcripts preserve source ambiguity and honor a possible stop command');
 
     await reset();
     await mic.click();

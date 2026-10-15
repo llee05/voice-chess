@@ -49,6 +49,7 @@
 
   const speech = new VoiceChessSpeech({
     Recognition: window.SpeechRecognition ?? window.webkitSpeechRecognition,
+    language: navigator.languages?.find(language => /^en(?:-|$)/i.test(language)) ?? 'en-US',
     onState(active, message) {
       toggle.setAttribute('aria-pressed', String(active));
       const label = active ? 'Stop listening' : 'Start listening';
@@ -63,12 +64,13 @@
       }
     },
     onTranscript(text) { transcript.textContent = text; },
-    onCommand(text) {
+    onCommand(text, alternatives = [text]) {
       if (!isRush() || document.hidden) return;
-      const command = VoiceChessCommands.parse(text);
-      if (command?.kind === 'stop') { speech.stop(); return; }
+      const candidates = alternatives.slice(0, 5);
+      const commands = candidates.map(candidate => VoiceChessCommands.parse(candidate));
+      if (commands.some(command => command?.kind === 'stop')) { speech.stop(); return; }
       if (submitting) return;
-      if (!command) { status.textContent = 'Use standard notation or shorthand: Nf3, “d e”, or “castle”.'; return; }
+      if (!commands.some(command => command?.kind === 'move')) { status.textContent = 'Use standard notation or shorthand: Nf3, “d e”, or “castle”.'; return; }
       try {
         const position = VoiceChessBoard.snapshot();
         // Keep an unchanged position locked, but accept the next final command
@@ -79,8 +81,9 @@
           pendingCheck = null;
           waitingPosition = null;
         }
-        const result = VoiceChessCommands.resolve(command, position.moves);
+        const result = VoiceChessCommands.resolveAlternatives(candidates, position.moves);
         if (result.error) { status.textContent = result.error; return; }
+        if (result.transcript !== text) transcript.textContent = `${text} → ${result.transcript}`;
         const move = result.move;
         const key = `${position.fen}:${move.from}${move.to}${move.promotion ?? ''}`;
         if (lastSubmission === key) { status.textContent = 'Already sent. Wait for the board to change.'; return; }

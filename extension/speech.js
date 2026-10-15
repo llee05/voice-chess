@@ -1,6 +1,7 @@
 const VoiceChessSpeech = class {
-  constructor({ Recognition, onState, onTranscript, onCommand, timers = globalThis }) {
+  constructor({ Recognition, language = 'en-US', onState, onTranscript, onCommand, timers = globalThis }) {
     this.Recognition = Recognition;
+    this.language = language;
     this.onState = onState;
     this.onTranscript = onTranscript;
     this.onCommand = onCommand;
@@ -31,10 +32,10 @@ const VoiceChessSpeech = class {
       return;
     }
     this.recognition = recognition;
-    recognition.lang = 'en-US';
+    recognition.lang = this.language;
     recognition.continuous = false;
     recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
+    recognition.maxAlternatives = 5;
     let finalizedThrough = -1;
     let finishing = false;
     let receivedFinal = false;
@@ -57,11 +58,12 @@ const VoiceChessSpeech = class {
       let interim = null;
       for (let index = Math.max(event.resultIndex, finalizedThrough + 1); index < event.results.length; index++) {
         const result = event.results[index];
-        const text = result[0].transcript.trim();
         if (result.isFinal) {
           finalizedThrough = index;
-          if (command === null && text) command = text;
-        } else interim = text;
+          const alternatives = [...new Set(Array.from({ length: Math.min(result.length, 5) }, (_, option) => result[option]?.transcript)
+            .filter(text => typeof text === 'string').map(text => text.trim()).filter(Boolean))];
+          if (command === null && alternatives.length) command = alternatives;
+        } else interim = result[0]?.transcript?.trim() ?? '';
       }
       // Final results are immutable and accumulate for this recognition object.
       // Consume the entire batch before delivering one command, so ignored finals
@@ -69,8 +71,8 @@ const VoiceChessSpeech = class {
       if (command !== null) {
         receivedFinal = true;
         this.failures = 0;
-        this.onTranscript(command);
-        this.onCommand(command);
+        this.onTranscript(command[0]);
+        this.onCommand(command[0], command);
       } else if (interim !== null) {
         this.onTranscript(interim);
       }

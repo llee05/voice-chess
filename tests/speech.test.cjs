@@ -3,10 +3,11 @@ const assert = require('node:assert/strict');
 const { load } = require('./helpers.cjs');
 const Speech = load('speech.js', 'VoiceChessSpeech');
 
-function fixture(Recognition) {
+function fixture(Recognition, language) {
   const instances = [];
   const tasks = new Map();
   const states = [], transcripts = [], commands = [];
+  const alternatives = [];
   class FakeRecognition {
     constructor() { instances.push(this); }
     start() { this.onstart(); }
@@ -18,8 +19,9 @@ function fixture(Recognition) {
     clearTimeout(id) { tasks.delete(id); },
   };
   const session = new Speech({
-    Recognition: Recognition === undefined ? FakeRecognition : Recognition,
-    timers, onState: (...args) => states.push(args), onTranscript: text => transcripts.push(text), onCommand: text => commands.push(text),
+    Recognition: Recognition === undefined ? FakeRecognition : Recognition, language,
+    timers, onState: (...args) => states.push(args), onTranscript: text => transcripts.push(text),
+    onCommand: (text, options) => { commands.push(text); alternatives.push(options); },
   });
   function emit(text, isFinal = true, resultIndex = 0, prior = []) {
     const result = [{ transcript: text }];
@@ -27,7 +29,7 @@ function fixture(Recognition) {
     instances.at(-1).onresult({ resultIndex, results: [...prior, result] });
   }
   function runTasks() { const callbacks = [...tasks.values()]; tasks.clear(); callbacks.forEach(callback => callback()); }
-  return { session, instances, states, transcripts, commands, tasks, emit, runTasks };
+  return { session, instances, states, transcripts, commands, alternatives, tasks, emit, runTasks };
 }
 
 test('starts only once and uses final results for moves', () => {
@@ -40,6 +42,36 @@ test('starts only once and uses final results for moves', () => {
   assert.deepEqual(f.commands, ['e two to e four']);
   assert.equal(f.instances.length, 1);
   assert.equal(f.instances[0].continuous, false);
+});
+
+test('passes bounded final alternatives together, but displays only the leading interim transcript', () => {
+  const f = fixture();
+  f.session.start();
+  assert.equal(f.instances[0].maxAlternatives, 5);
+  const result = [' nice f tree ', ' knight f three ', 'knight f three', 'Nf3', 'night f3', 'e4']
+    .map(transcript => ({ transcript }));
+  result.isFinal = false;
+  f.instances[0].onresult({ resultIndex: 0, results: [result] });
+  assert.deepEqual(f.commands, []);
+  assert.equal(f.transcripts.at(-1), 'nice f tree');
+  result.isFinal = true;
+  f.instances[0].onresult({ resultIndex: 0, results: [result] });
+  assert.deepEqual(f.commands, ['nice f tree']);
+  assert.deepEqual(Array.from(f.alternatives[0]), ['nice f tree', 'knight f three', 'Nf3', 'night f3']);
+  f.instances[0].onresult({ resultIndex: 0, results: [result] });
+  assert.equal(f.commands.length, 1);
+});
+
+test('uses the requested English locale and keeps it across reconnects', () => {
+  const f = fixture(undefined, 'en-AU');
+  f.session.start();
+  assert.equal(f.instances[0].lang, 'en-AU');
+  f.instances[0].onend();
+  f.runTasks();
+  assert.equal(f.instances[1].lang, 'en-AU');
+  const fallback = fixture();
+  fallback.session.start();
+  assert.equal(fallback.instances[0].lang, 'en-US');
 });
 
 test('requests finalization when speech ends, but submits only the final result', () => {

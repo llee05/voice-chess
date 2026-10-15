@@ -1,11 +1,14 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { load, plain } = require('./helpers.cjs');
-const { parse, resolve } = load('commands.js', 'VoiceChessCommands');
+const { parse, resolve, resolveAlternatives } = load('commands.js', 'VoiceChessCommands');
 
 for (const [text, san] of [
   ['e4', 'e4'], ['e5', 'e5'], ['E4', 'e4'], ['e four', 'e4'], ['e five', 'e5'],
   ['Nf3', 'Nf3'], ['nf3', 'Nf3'], ['N f three', 'Nf3'], ['en f three', 'Nf3'],
+  ['knight f for', 'Nf4'], ['night f fore', 'Nf4'], ['e for', 'e4'], ['e too', 'e2'],
+  ['queen h to', 'Qh2'], ['rook a won', 'Ra1'], ['e ate queen', 'e8=Q'],
+  ['queen takes h for check', 'Qxh4+'], ['e takes d for', 'exd4'],
   ['Knight f three.', 'Nf3'], ['night f3', 'Nf3'], ['Bb5', 'Bb5'],
   ['Qxh7', 'Qxh7'], ['queen takes h seven', 'Qxh7'], ['queen x h7', 'Qxh7'],
   ['exd5', 'exd5'], ['e takes d five', 'exd5'],
@@ -46,6 +49,7 @@ for (const text of [
   'Ne9', 'e0', 'Nf', 'xe4', 'e8K', 'e8=K', 'e4=Q', 'Nf3=Q', 'Nf3++', 'Nf3!', 'O-O-O-O', 'a'.repeat(200),
   'castle both sides', 'castle king', 'please castle', 'castle then e4', 'castle++',
   'de0', 'de9', 'de5Q', 'deK', 'dxe=K', 'Bxe', 'e4Q', 'de e4', 'de ed',
+  'before', 'knight before', 'rook a to e seven', 'e to e for', 'knight for e two', 'e for e five',
 ]) {
   test(`rejects unsupported notation ${JSON.stringify(text.slice(0, 50))}`, () => assert.equal(parse(text), null));
 }
@@ -201,4 +205,55 @@ test('rejects conflicting native SAN and does not invent missing SAN', () => {
   assert.match(resolve(null, []).error, /Use standard notation/);
   assert.match(resolve(parse('de'), [move('de', 'd4', 'e5')]).error, /does not provide standard move notation/);
   assert.match(resolve(parse('castle'), [move('castle', 'e1', 'g1')]).error, /does not provide standard move notation/);
+});
+
+test('recovers a unique legal move from an alternative transcript', () => {
+  const moves = [move('Nf3', 'g1', 'f3')];
+  const result = resolveAlternatives(['nice f tree', 'knight f three'], moves);
+  assert.equal(result.move, moves[0]);
+  assert.equal(result.transcript, 'knight f three');
+});
+
+test('different spellings of the same move agree, including shorthand and homophones', () => {
+  const moves = [move('Qxh4+', 'h1', 'h4')];
+  const result = resolveAlternatives(['queen h for', 'Qxh4', 'queen takes h four'], moves);
+  assert.equal(result.move, moves[0]);
+  assert.equal(result.transcript, 'queen h for');
+});
+
+test('conflicting legal transcripts require repetition rather than picking the first', () => {
+  const result = resolveAlternatives(['e four', 'd four'], [move('e4', 'e2', 'e4'), move('d4', 'd2', 'd4')]);
+  assert.equal(result.move, undefined);
+  assert.match(result.error, /e4 or d4/);
+});
+
+test('a disambiguated alternative cannot override an ambiguous transcript', () => {
+  const moves = [move('Ngf3', 'g1', 'f3'), move('Ndf3', 'd2', 'f3')];
+  for (const transcripts of [['Nf3', 'Ngf3'], ['Ngf3', 'Nf3']]) {
+    const result = resolveAlternatives(transcripts, moves);
+    assert.equal(result.move, undefined);
+    assert.match(result.error, /Ngf3 or Ndf3/);
+  }
+});
+
+test('alternative castling and pawn shorthand preserve every ambiguous move', () => {
+  for (const [transcripts, moves] of [
+    [['castle short', 'castle'], [move('O-O', 'e1', 'g1'), move('O-O-O', 'e1', 'c1')]],
+    [['de5', 'de'], [move('dxe5', 'd4', 'e5'), move('dxe3', 'd2', 'e3')]],
+  ]) assert.equal(resolveAlternatives(transcripts, moves).move, undefined);
+});
+
+test('alternatives cannot invent legality, fill in a promotion piece, or change explicit takes', () => {
+  assert.equal(resolveAlternatives(['Nf3', 'night f three'], [move('Ne4', 'd2', 'e4')]).move, undefined);
+  assert.equal(resolveAlternatives(['e8', 'e eight'], [move('e8=Q', 'e7', 'e8', { promotion: 'q' })]).move, undefined);
+  assert.equal(resolveAlternatives(['queen takes h four'], [move('Qh4', 'h1', 'h4')]).move, undefined);
+  assert.equal(resolveAlternatives(['e4 e5'], [move('e4', 'e2', 'e4')]).move, undefined);
+  assert.match(resolveAlternatives(['e4'], [{ from: 'e2', to: 'e4' }]).error, /does not provide standard move notation/);
+});
+
+test('conflicting promotion alternatives never default to a queen', () => {
+  const moves = ['Q', 'N'].map(piece => move('e8=' + piece, 'e7', 'e8', { promotion: piece.toLowerCase() }));
+  const result = resolveAlternatives(['e8Q', 'e8N'], moves);
+  assert.equal(result.move, undefined);
+  assert.match(result.error, /e8=Q or e8=N/);
 });
