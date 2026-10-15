@@ -50,6 +50,8 @@ const VoiceChessCommands = (() => {
     if (typeof transcript !== 'string' || transcript.length > 160) return null;
     let text = transcript.trim().replace(/\.$/, '').trim();
     if (/^(stop|pause|stop listening|pause listening|microphone off)$/i.test(text)) return { kind: 'stop' };
+    // Accept the reported queen mishearing wherever the normal grammar allows it.
+    text = text.replace(/\bquinn\b/gi, 'queen');
     // Observed recognizer errors: "nothing g5" for "knight takes g5", and
     // "96" / "ninety-six" for "knight e six". Keep repairs narrowly scoped.
     text = text.replace(/^nothing\s+/i, 'knight takes ').replace(/^ninety-/i, 'ninety ');

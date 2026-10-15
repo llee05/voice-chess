@@ -187,12 +187,12 @@ const path = require('node:path');
 
     await reset({ fen: '4k3/7p/8/8/8/8/8/4K2Q w - - 0 1', moves: [{ from: 'h1', to: 'h7', san: 'Qxh7+' }] });
     await mic.click();
-    await speak('queen h seven', false);
+    await speak('quinn h seven', false);
     assert.equal((await submitted()).length, 0);
-    await speak('queen h seven');
+    await speak('Quinn h seven');
     assert.equal((await submitted())[0].to, 'h7');
     assert.equal(await status.textContent(), 'Sent Qxh7+');
-    console.log('✓ Omitted capture marker and check suffix resolve to native SAN on final results');
+    console.log('✓ Quinn repairs and omitted capture/check markers resolve to native SAN on final results');
 
     await reset({ fen: '4k3/8/8/4p3/3P4/4p3/3P4/4K3 w - - 0 1', moves: [
       { from: 'd4', to: 'e5', san: 'dxe5' }, { from: 'd2', to: 'e3', san: 'dxe3' },
@@ -223,10 +223,10 @@ const path = require('node:path');
     await speak('castle');
     assert.equal((await submitted()).length, 0);
     assert.match(await status.textContent(), /O-O or O-O-O/);
-    await speak('long castle');
+    await speak('castle quinn side');
     assert.equal((await submitted())[0].to, 'c1');
     assert.equal(await status.textContent(), 'Sent O-O-O');
-    console.log('✓ Bare castle reports both sides; long castle specifies queenside');
+    console.log('✓ Bare castle reports both sides; castle quinn side specifies queenside');
 
     await reset({ fen: '4k3/8/8/8/8/8/8/4K2R w K - 0 1', moves: [{ from: 'e1', to: 'g1', san: 'O-O' }] });
     await mic.click();

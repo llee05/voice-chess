@@ -15,6 +15,9 @@ for (const [text, san] of [
   ['nothing g for check', 'Nxg4+'], ['nothing g5 checkmate', 'Nxg5#'],
   ['Knight f three.', 'Nf3'], ['night f3', 'Nf3'], ['Bb5', 'Bb5'],
   ['Qxh7', 'Qxh7'], ['queen takes h seven', 'Qxh7'], ['queen x h7', 'Qxh7'],
+  ['quinn h seven', 'Qh7'], ['Quinn H7.', 'Qh7'], ['quinn takes h seven check', 'Qxh7+'],
+  ['quinn a h four', 'Qah4'], ['e eight quinn', 'e8=Q'], ['e8 equals quinn', 'e8=Q'],
+  ['castle quinn side', 'O-O-O'], ['quinn-side castle check', 'O-O-O+'],
   ['exd5', 'exd5'], ['e takes d five', 'exd5'],
   ['ed5', 'exd5'], ['e d five', 'exd5'], ['dee e five', 'dxe5'],
   ['be5', 'bxe5'], ['bee e five', 'bxe5'], ['Be5', 'Be5'],
@@ -56,6 +59,7 @@ for (const text of [
   'before', 'knight before', 'rook a to e seven', 'e to e for', 'knight for e two', 'e for e five',
   '9', '90', '99', '960', '196', '9.6', '96 e4', 'please 96', 'ninety sixty', 'nineteen six',
   'nothing', 'nothing to g5', 'nothing g5 please', 'nothing g5 h7', 'do nothing g5', 'something g5', 'nothing castle',
+  'quinn', 'quinn to h7', 'quinn h7 please', 'quinn h7 quinn e4', 'quinnish h7', 'quinnh7', 'e4 quinn',
 ]) {
   test(`rejects unsupported notation ${JSON.stringify(text.slice(0, 50))}`, () => assert.equal(parse(text), null));
 }
@@ -287,4 +291,22 @@ test('repaired knight transcripts preserve source ambiguity and alternative conf
   const result = resolveAlternatives(['nothing g5', 'knight takes e5'], [move('Nxg5', 'e4', 'g5'), move('Nxe5', 'f3', 'e5')]);
   assert.equal(result.move, undefined);
   assert.match(result.error, /Nxg5 or Nxe5/);
+});
+
+test('quinn repairs still validate captures, check suffixes, and explicit promotion choices', () => {
+  const capture = move('Qxh7+', 'h1', 'h7');
+  assert.equal(resolveAlternatives(['quinn h seven', 'queen h seven'], [capture]).move, capture);
+  assert.equal(resolve(parse('quinn takes h seven check'), [capture]).move, capture);
+  assert.equal(resolve(parse('quinn h seven checkmate'), [capture]).move, undefined);
+  assert.equal(resolve(parse('quinn takes h seven'), [move('Qh7', 'h1', 'h7')]).move, undefined);
+  const promotions = ['Q', 'N'].map(piece => move('e8=' + piece, 'e7', 'e8', { promotion: piece.toLowerCase() }));
+  assert.equal(resolve(parse('e eight quinn'), promotions).move.promotion, 'q');
+});
+
+test('quinn does not choose between ambiguous queens', () => {
+  const moves = [move('Qah4', 'a4', 'h4'), move('Qeh4', 'e1', 'h4')];
+  const result = resolveAlternatives(['quinn h four', 'quinn a h four'], moves);
+  assert.equal(result.move, undefined);
+  assert.match(result.error, /Qah4 or Qeh4/);
+  assert.equal(resolve(parse('quinn a h four'), moves).move.from, 'a4');
 });
