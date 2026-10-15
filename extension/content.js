@@ -68,7 +68,7 @@
       const command = VoiceChessCommands.parse(text);
       if (command?.kind === 'stop') { speech.stop(); return; }
       if (submitting) return;
-      if (!command) { status.textContent = 'Use standard notation: e4 or Nf3 (“knight f three”).'; return; }
+      if (!command) { status.textContent = 'Use standard notation or shorthand: Nf3, “d e”, or “castle”.'; return; }
       try {
         const position = VoiceChessBoard.snapshot();
         // Keep an unchanged position locked, but accept the next final command

@@ -1,6 +1,6 @@
 # Voice Chess
 
-A minimal browser extension for **Chess.com Puzzle Rush**. Click the microphone, speak a move in standard algebraic notation (SAN), keep solving.
+A minimal browser extension for **Chess.com Puzzle Rush**. Click the microphone, speak a move in standard algebraic notation (SAN) or common shorthand, keep solving.
 
 Vanilla JavaScript, HTML, CSS, and Manifest V3. No framework, build step, backend, API key, or runtime dependencies. Chess.com's board supplies legal moves and processes the moves you request.
 
@@ -20,18 +20,25 @@ The extension is ready to load directly; installing Node or running npm is unnec
 | --- | --- | --- |
 | `e4` / `e5` | “e four” / “e five” | Move a pawn |
 | `Nf3` | “knight f three” or “N f three” | Move a knight |
-| `Qxh7` | “queen takes h seven” | Capture with the queen |
-| `exd5` | “e takes d five” | Capture with the e-file pawn |
+| `Qxh7` | “queen takes h seven” or “queen h seven” | Capture with the queen; “takes” is optional |
+| `exd5` | “e takes d five” or “e d five” | Capture with the e-file pawn; `ed5` also works |
+| `dxe5` | “d e” or “d takes e” | File-only pawn capture (`de`); requires one matching legal move |
 | `Ngf3` | “knight g f three” | Specify the knight's file |
 | `R1e2` | “rook one e two” | Specify the rook's rank |
-| `O-O` / `O-O-O` | “O O” / “O O O” | Castle |
-| `e8=Q` / `e8=N` | “e eight equals queen” / “e eight equals knight” | Promote to the specified piece |
+| `O-O` / `O-O-O` | “O O” / “O O O”, “short castle” / “long castle” | Castle kingside / queenside; “castle king side” / “castle queen side” also work |
+| Either castle | “castle” | Castle only when exactly one side is legal |
+| `e8=Q` / `e8=N` | “e eight queen” / “e eight knight” | Promote to the specified piece; “equals” is optional (`e8Q`, `e8N`) |
+| `dxe8=N` | “d e knight” or “d e eight knight” | Capture and promote; the promotion piece remains mandatory |
 | `Qh7+` / `Qh7#` | “queen h seven check” / “queen h seven checkmate” | Include check or mate |
 | — | “stop” | Turn the microphone off |
 
-Moves must use SAN, following the [PGN notation specification](https://www.saremba.de/chessgml/standards/pgn/pgn-complete.htm). Spoken piece names and numbers normalize to that notation. Captures require `x`, ambiguous pieces require the appropriate file or rank, and promotions require `=Q`, `=R`, `=B`, or `=N`. Check (`+`) and mate (`#`) are optional; if supplied, they must be correct. In compact notation, uppercase `Bxd5` is a bishop capture and lowercase `bxd5` is a pawn capture; say “bishop takes d five” to identify the bishop clearly.
+SAN follows the [PGN notation specification](https://www.saremba.de/chessgml/standards/pgn/pgn-complete.htm). Spoken piece names and numbers normalize to that notation, and supported shorthand is matched against the board's own legal SAN. You may omit `x` or “takes”: `Qh7` can match `Qxh7`, and `de5` can match `dxe5`. Explicit `x` or “takes” still requires a capture. Pawn captures must include both files; `e5` alone does not request a pawn capture.
 
-Source/destination commands (`e2e4`, “e two to e four”), NATO files, phrases such as “knight to f three”, and multiple moves in one utterance are rejected. Use one SAN move at a time. For a rank-disambiguated bishop move, use uppercase `B` or say “bishop” (`B4e5`, “bishop four e five”); lowercase `b4e5` is rejected as a coordinate command. “stop” remains a voice control.
+For pawn captures you may also omit the destination rank: `de` or “d e” matches a legal d-file pawn capture onto the e-file, including en passant. If both `dxe5` and `dxe3` are legal, the control shows both and waits; say “d e five” to specify the rank. Likewise, “castle” works when exactly one castling move is legal. If both sides are legal, specify “short castle” / “castle kingside” or “long castle” / “castle queenside”. Shorthand never chooses a puzzle answer for you.
+
+Ambiguous pieces still require the appropriate file or rank. Promotions require an explicit queen, rook, bishop, or knight, even if the board lists only one promotion; you may omit `=` or “equals” (`e8Q`, “e eight queen”, `deN`). Check (`+`) and mate (`#`) are optional; if supplied, they must be correct. Uppercase `B` or the spoken word “bishop” identifies a bishop; lowercase `b` identifies the pawn file in capture shorthand (`Be5` is a bishop move, `be5` requests `bxe5`). Say “bishop e five” to identify the bishop clearly.
+
+Source/destination commands (`e2e4`, “e two to e four”), NATO files, phrases such as “knight to f three”, and multiple moves in one utterance are rejected. Use one move at a time. For a rank-disambiguated bishop move, use uppercase `B` or say “bishop” (`B4e5`, “bishop four e five”); lowercase `b4e5` is rejected as a coordinate command. “stop” remains a voice control.
 
 Only final recognition results trigger moves. The move must match the board's own legal SAN. Immediately before submission, the extension rechecks the board instance, position, and availability of the requested move. When more than one piece could match, the extension displays disambiguated notation such as `Ngf3` or `Ndf3`; it never picks one for you. A legal move can still be an incorrect puzzle answer: Chess.com decides that. The extension does not read puzzle solutions or select moves.
 
@@ -50,7 +57,7 @@ The extension declares no additional API permissions and injects scripts only on
 - **No control:** reload the Puzzle Rush tab after loading or updating the extension. Use the standard URL above.
 - **Microphone denied:** allow the microphone in Chess.com's address-bar site settings, then click the mic again.
 - **Speech unavailable or connection error:** use Google Chrome with internet access and a working microphone. Some Chromium builds expose the API without a working recognition service.
-- **Wrong transcript:** speak one SAN move, using piece names and clear file letters and numbers. Recognition accuracy and latency depend on your browser, microphone, and connection.
+- **Wrong transcript:** speak one move, using piece names and clear file letters and numbers. If shorthand is ambiguous, use the full SAN shown in the status. Recognition accuracy and latency depend on your browser, microphone, and connection.
 - **Board does not change:** ensure a rush is running, wait for animations, and use the mouse if the site rejects the request. Toggle the mic to retry the same command deliberately.
 
 Chess.com's board API is undocumented and may change. The adapter checks its expected methods and move data, including consistent promotion choices, and stops with a message when they are unavailable. Its integration approach is informed by the public [Chess Helper board adapter](https://github.com/everyonesdesign/Chess-Helper/blob/master/app/src/chessboard/component-chessboard/index.ts). The extension was loaded on the live logged-out Puzzle Rush page and its board methods were checked. Live signed-in Puzzle Rush and real microphone recognition still need a manual check; automated tests use a simulated board API and speech events, not a Chess.com account.
@@ -66,7 +73,7 @@ npm run check
 npm run test:browser
 ```
 
-Set `CHROMIUM_PATH` if Chromium is not at `/usr/bin/chromium`. Playwright is a development-only dependency; browser tests load the actual unpacked extension on an intercepted Chess.com URL. They cover command delivery, ambiguity, duplicate speech events, stale positions, black-side puzzles, underpromotion, microphone denial, failed submissions, navigation, hidden-tab cleanup, keyboard access, narrow or short viewports, and page containers that clip overflow. The visual screenshot is saved to `artifacts/voice-chess.png` and clearly labels the local test board.
+Set `CHROMIUM_PATH` if Chromium is not at `/usr/bin/chromium`. Playwright is a development-only dependency; browser tests load the actual unpacked extension on an intercepted Chess.com URL. They cover SAN and shorthand delivery, ambiguous pawn captures and castling, duplicate speech events, stale positions, black-side puzzles, underpromotion, microphone denial, failed submissions, navigation, hidden-tab cleanup, keyboard access, narrow or short viewports, and page containers that clip overflow. The visual screenshot is saved to `artifacts/voice-chess.png` and clearly labels the local test board.
 
 `npm run check` validates Puzzle Rush injection scope, content script order and syntax, permissions, version alignment, and packaged icon dimensions.
 

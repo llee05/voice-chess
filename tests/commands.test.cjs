@@ -9,12 +9,25 @@ for (const [text, san] of [
   ['Knight f three.', 'Nf3'], ['night f3', 'Nf3'], ['Bb5', 'Bb5'],
   ['Qxh7', 'Qxh7'], ['queen takes h seven', 'Qxh7'], ['queen x h7', 'Qxh7'],
   ['exd5', 'exd5'], ['e takes d five', 'exd5'],
+  ['ed5', 'exd5'], ['e d five', 'exd5'], ['dee e five', 'dxe5'],
+  ['be5', 'bxe5'], ['bee e five', 'bxe5'], ['Be5', 'Be5'],
+  ['de', 'dxe'], ['d e', 'dxe'], ['dee ee', 'dxe'], ['d takes e', 'dxe'], ['dxe', 'dxe'],
+  ['ef', 'exf'], ['e f', 'exf'], ['g h', 'gxh'],
   ['bxc5', 'bxc5'], ['Bxc5', 'Bxc5'], ['bishop takes c five', 'Bxc5'], ['B X c five', 'Bxc5'],
   ['Ngf3', 'Ngf3'], ['knight g f three', 'Ngf3'], ['R1e2', 'R1e2'], ['rook one e two', 'R1e2'],
   ['Rae2', 'Rae2'], ['Ng1f3', 'Ng1f3'], ['B4e5', 'B4e5'], ['bishop four e five', 'B4e5'],
   ['O-O', 'O-O'], ['0-0', 'O-O'], ['O O', 'O-O'],
   ['O-O-O', 'O-O-O'], ['zero zero zero', 'O-O-O'],
+  ['castle', 'castle'], ['Castle.', 'castle'], ['castle check', 'castle+'],
+  ['castle check mate', 'castle#'], ['castle+', 'castle+'],
+  ['castle kingside', 'O-O'], ['castle king side', 'O-O'], ['castle king-side', 'O-O'],
+  ['kingside castle', 'O-O'], ['short castle', 'O-O'], ['castle short', 'O-O'],
+  ['castle queenside', 'O-O-O'], ['queen side castle', 'O-O-O'], ['castle queen-side', 'O-O-O'],
+  ['long castle', 'O-O-O'], ['castle long', 'O-O-O'], ['long castle check', 'O-O-O+'],
   ['e8=Q', 'e8=Q'], ['e eight equals queen', 'e8=Q'], ['e8=n', 'e8=N'], ['e eight equals knight', 'e8=N'],
+  ['e8Q', 'e8=Q'], ['e eight queen', 'e8=Q'], ['e eight knight check', 'e8=N+'],
+  ['de8n', 'dxe8=N'], ['d e eight queen', 'dxe8=Q'], ['axb8r', 'axb8=R'],
+  ['deN', 'dxe=N'], ['d e knight', 'dxe=N'], ['d takes e equals queen check', 'dxe=Q+'],
   ['axb8=N+', 'axb8=N+'], ['a takes b eight equals knight check', 'axb8=N+'], ['e1=R', 'e1=R'],
   ['Qh7+', 'Qh7+'], ['queen h seven check', 'Qh7+'], ['Qh7#', 'Qh7#'], ['queen h seven check mate', 'Qh7#'],
 ]) {
@@ -27,10 +40,12 @@ for (const [text, kind] of [['stop', 'stop'], ['stop listening', 'stop'], ['paus
 
 for (const text of [
   '', 'hello', 'help', 'e2e4', 'e two to e four', 'g1f3', 'b1c3', 'b one c three', 'e7e8q', 'knight to f three', 'rook a to e7',
-  'echo four', 'knight foxtrot three', 'castle kingside', 'pawn e4', 'e8 promote to queen',
+  'echo four', 'knight foxtrot three', 'pawn e4', 'e8 promote to queen',
   'move e4', 'please Nf3', 'maybe e4', 'e4 e5', 'b4 e5', 'b four e five', 'b1 c3+',
   'Nf3 and Nc6', 'e4,e5', 'queen', 'knight f3 please',
   'Ne9', 'e0', 'Nf', 'xe4', 'e8K', 'e8=K', 'e4=Q', 'Nf3=Q', 'Nf3++', 'Nf3!', 'O-O-O-O', 'a'.repeat(200),
+  'castle both sides', 'castle king', 'please castle', 'castle then e4', 'castle++',
+  'de0', 'de9', 'de5Q', 'deK', 'dxe=K', 'Bxe', 'e4Q', 'de e4', 'de ed',
 ]) {
   test(`rejects unsupported notation ${JSON.stringify(text.slice(0, 50))}`, () => assert.equal(parse(text), null));
 }
@@ -55,11 +70,24 @@ test('rejects moves absent from native legal SAN, including pinned pieces', () =
   assert.equal(resolve(parse('Nf3'), [move('Ne4', 'd2', 'e4')]).move, undefined);
 });
 
-test('requires capture notation and never turns a quiet move into a capture', () => {
+test('allows omitted piece capture markers but respects explicit captures', () => {
   const capture = [move('Qxh7', 'h1', 'h7')];
-  assert.equal(resolve(parse('Qh7'), capture).move, undefined);
+  assert.equal(resolve(parse('Qh7'), capture).move.from, 'h1');
+  assert.equal(resolve(parse('queen h seven'), capture).move.from, 'h1');
   assert.equal(resolve(parse('Qxh7'), capture).move.from, 'h1');
   assert.equal(resolve(parse('Qxh7'), [move('Qh7', 'h1', 'h7')]).move, undefined);
+});
+
+test('requires disambiguation for captures with an omitted marker', () => {
+  const moves = [move('Ngxf3', 'g1', 'f3'), move('Ndxf3', 'd2', 'f3')];
+  assert.match(resolve(parse('Nf3'), moves).error, /Ngxf3 or Ndxf3/);
+  assert.equal(resolve(parse('Ngf3'), moves).move.from, 'g1');
+});
+
+test('does not prefer an exact quiet spelling over other matching moves', () => {
+  const result = resolve(parse('Qh7'), [move('Qh7', 'h1', 'h7'), move('Qxh7', 'a7', 'h7')]);
+  assert.equal(result.move, undefined);
+  assert.match(result.error, /Qh7 or Qxh7/);
 });
 
 test('distinguishes bishop B from pawn file b', () => {
@@ -67,11 +95,37 @@ test('distinguishes bishop B from pawn file b', () => {
   assert.equal(resolve(parse('bxc5'), moves).move.from, 'b4');
   assert.equal(resolve(parse('Bxc5'), moves).move.from, 'g1');
   assert.equal(resolve(parse('bishop takes c five'), moves).move.from, 'g1');
+  assert.equal(resolve(parse('bc5'), moves).move.from, 'b4');
+  assert.equal(resolve(parse('b c'), moves).move.from, 'b4');
+  assert.equal(resolve(parse('Bc5'), moves).move.from, 'g1');
+  assert.equal(resolve(parse('bishop c five'), moves).move.from, 'g1');
+});
+
+test('resolves pawn captures with omitted takes or destination rank', () => {
+  const moves = [move('dxe5', 'd4', 'e5'), move('dxc5', 'd4', 'c5'), move('exd5', 'e4', 'd5')];
+  for (const text of ['de', 'd e', 'd takes e', 'dxe', 'de5', 'd e five']) {
+    assert.equal(resolve(parse(text), moves).move.san, 'dxe5');
+  }
+  assert.equal(resolve(parse('ed'), moves).move.san, 'exd5');
+  assert.equal(resolve(parse('dc'), moves).move.san, 'dxc5');
+  assert.equal(resolve(parse('de'), [move('e5', 'e4', 'e5')]).move, undefined);
+  assert.equal(resolve(parse('e5'), moves).move, undefined);
+});
+
+test('rankless pawn captures report every matching legal SAN without choosing a rank', () => {
+  const moves = [move('dxe5', 'd4', 'e5'), move('dxe3', 'd2', 'e3')];
+  const result = resolve(parse('de'), moves);
+  assert.equal(result.move, undefined);
+  assert.match(result.error, /dxe5 or dxe3/);
+  assert.equal(resolve(parse('de5'), moves).move.from, 'd4');
+  assert.equal(resolve(parse('de3'), moves).move.from, 'd2');
 });
 
 test('supports native en passant SAN without guessing from an empty destination', () => {
   const moves = [move('exd6', 'e5', 'd6')];
   assert.equal(resolve(parse('e takes d six'), moves).move.from, 'e5');
+  assert.equal(resolve(parse('ed6'), moves).move.from, 'e5');
+  assert.equal(resolve(parse('ed'), moves).move.from, 'e5');
   assert.equal(resolve(parse('d6'), moves).move, undefined);
 });
 
@@ -80,12 +134,47 @@ test('requires explicit queen promotion and supports underpromotion', () => {
   assert.equal(resolve(parse('e8'), moves).move, undefined);
   assert.equal(resolve(parse('e8=Q'), moves).move.promotion, 'q');
   assert.equal(resolve(parse('e8=N'), moves).move.promotion, 'n');
+  assert.equal(resolve(parse('e8Q'), moves).move.promotion, 'q');
+  assert.equal(resolve(parse('e eight knight'), moves).move.promotion, 'n');
+});
+
+test('rankless captures require explicit promotion and preserve the requested piece', () => {
+  const moves = ['Q', 'R', 'B', 'N'].map(piece => move('dxe8=' + piece, 'd7', 'e8', { promotion: piece.toLowerCase() }));
+  assert.equal(resolve(parse('de'), moves).move, undefined);
+  assert.equal(resolve(parse('de8'), moves).move, undefined);
+  assert.equal(resolve(parse('deQ'), moves).move.promotion, 'q');
+  assert.equal(resolve(parse('d e knight'), moves).move.promotion, 'n');
+  assert.equal(resolve(parse('d e eight rook'), moves).move.promotion, 'r');
 });
 
 test('matches castling SAN for either color', () => {
   const moves = [move('O-O', 'e8', 'g8'), move('O-O-O', 'e8', 'c8')];
   assert.equal(resolve(parse('O O'), moves).move.to, 'g8');
   assert.equal(resolve(parse('O-O-O'), moves).move.to, 'c8');
+  assert.equal(resolve(parse('short castle'), moves).move.to, 'g8');
+  assert.equal(resolve(parse('castle queen side'), moves).move.to, 'c8');
+});
+
+test('bare castle requires a single legal castling move', () => {
+  const king = move('O-O', 'e1', 'g1');
+  const queen = move('O-O-O', 'e1', 'c1');
+  assert.equal(resolve(parse('castle'), [king]).move.to, 'g1');
+  assert.equal(resolve(parse('castle'), [queen]).move.to, 'c1');
+  const result = resolve(parse('castle'), [king, queen]);
+  assert.equal(result.move, undefined);
+  assert.match(result.error, /O-O or O-O-O/);
+  assert.equal(resolve(parse('castle'), [move('Kf1', 'e1', 'f1')]).move, undefined);
+  assert.equal(resolve(parse('castle long'), [king]).move, undefined);
+});
+
+test('validates supplied check or mate suffixes on shorthand', () => {
+  assert.equal(resolve(parse('Qh7+'), [move('Qxh7+', 'h1', 'h7')]).move.to, 'h7');
+  assert.equal(resolve(parse('Qh7#'), [move('Qxh7+', 'h1', 'h7')]).move, undefined);
+  const captures = [move('dxe5+', 'd4', 'e5'), move('dxe3', 'd2', 'e3')];
+  assert.equal(resolve(parse('de check'), captures).move.to, 'e5');
+  assert.equal(resolve(parse('de checkmate'), captures).move, undefined);
+  assert.equal(resolve(parse('castle check'), [move('O-O+', 'e1', 'g1')]).move.to, 'g1');
+  assert.equal(resolve(parse('castle checkmate'), [move('O-O+', 'e1', 'g1')]).move, undefined);
 });
 
 test('permits omitted check or mate, but validates supplied suffixes', () => {
@@ -100,10 +189,16 @@ test('permits omitted check or mate, but validates supplied suffixes', () => {
 test('deduplicates repeated native moves', () => {
   const native = move('Nf3', 'g1', 'f3');
   assert.equal(resolve(parse('Nf3'), [native, native]).move.from, 'g1');
+  const capture = move('dxe5', 'd4', 'e5');
+  assert.equal(resolve(parse('de'), [capture, capture]).move.from, 'd4');
+  const castle = move('O-O', 'e1', 'g1');
+  assert.equal(resolve(parse('castle'), [castle, castle]).move.to, 'g1');
 });
 
 test('rejects conflicting native SAN and does not invent missing SAN', () => {
   assert.equal(resolve(parse('Nf3'), [move('Nf3', 'g1', 'f3'), move('Nf3', 'd2', 'f3')]).move, undefined);
   assert.match(resolve(parse('Nf3'), [{ from: 'g1', to: 'f3' }]).error, /does not provide standard move notation/);
   assert.match(resolve(null, []).error, /Use standard notation/);
+  assert.match(resolve(parse('de'), [move('de', 'd4', 'e5')]).error, /does not provide standard move notation/);
+  assert.match(resolve(parse('castle'), [move('castle', 'e1', 'g1')]).error, /does not provide standard move notation/);
 });

@@ -110,12 +110,53 @@ const path = require('node:path');
 
     await reset({ fen: '4k3/7p/8/8/8/8/8/4K2Q w - - 0 1', moves: [{ from: 'h1', to: 'h7', san: 'Qxh7+' }] });
     await mic.click();
-    await speak('Qh7');
+    await speak('queen h seven', false);
     assert.equal((await submitted()).length, 0);
-    await speak('queen takes h seven');
+    await speak('queen h seven');
     assert.equal((await submitted())[0].to, 'h7');
     assert.equal(await status.textContent(), 'Sent Qxh7+');
-    console.log('✓ Capture marker required; omitted check suffix allowed');
+    console.log('✓ Omitted capture marker and check suffix resolve to native SAN on final results');
+
+    await reset({ fen: '4k3/8/8/4p3/3P4/4p3/3P4/4K3 w - - 0 1', moves: [
+      { from: 'd4', to: 'e5', san: 'dxe5' }, { from: 'd2', to: 'e3', san: 'dxe3' },
+    ] });
+    await mic.click();
+    await speak('de');
+    assert.equal((await submitted()).length, 0);
+    assert.match(await status.textContent(), /dxe5 or dxe3/);
+    await speak('d e five');
+    assert.equal((await submitted())[0].from, 'd4');
+    assert.equal((await submitted())[0].to, 'e5');
+    assert.equal(await status.textContent(), 'Sent dxe5');
+    console.log('✓ Rankless pawn captures show ambiguity; saying the rank selects the requested move');
+
+    await reset({ fen: '4k3/8/8/4p3/3P4/8/8/4K3 w - - 0 1', moves: [{ from: 'd4', to: 'e5', san: 'dxe5' }] });
+    await mic.click();
+    await speak('d e', false);
+    assert.equal((await submitted()).length, 0);
+    await speak('d e');
+    assert.equal((await submitted())[0].to, 'e5');
+    assert.equal(await status.textContent(), 'Sent dxe5');
+    console.log('✓ A unique file-only pawn capture submits the native move');
+
+    await reset({ fen: '4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1', moves: [
+      { from: 'e1', to: 'g1', san: 'O-O' }, { from: 'e1', to: 'c1', san: 'O-O-O' },
+    ] });
+    await mic.click();
+    await speak('castle');
+    assert.equal((await submitted()).length, 0);
+    assert.match(await status.textContent(), /O-O or O-O-O/);
+    await speak('long castle');
+    assert.equal((await submitted())[0].to, 'c1');
+    assert.equal(await status.textContent(), 'Sent O-O-O');
+    console.log('✓ Bare castle reports both sides; long castle specifies queenside');
+
+    await reset({ fen: '4k3/8/8/8/8/8/8/4K2R w K - 0 1', moves: [{ from: 'e1', to: 'g1', san: 'O-O' }] });
+    await mic.click();
+    await speak('castle');
+    assert.equal((await submitted())[0].to, 'g1');
+    assert.equal(await status.textContent(), 'Sent O-O');
+    console.log('✓ Bare castle submits when only one side is legal');
 
     await reset({ mode: 'passive-observing' });
     await mic.click();
@@ -140,9 +181,20 @@ const path = require('node:path');
     await mic.click();
     await speak('a8');
     assert.equal((await submitted()).length, 0);
-    await speak('a eight equals knight');
+    await speak('a eight knight');
     assert.equal((await submitted())[0].promotion, 'N');
     console.log('✓ Native promotion handling');
+
+    await reset({ fen: '4r1k1/3P4/8/8/8/8/8/4K3 w - - 0 1', moves: [
+      { from: 'd7', to: 'e8', promotion: 'N', san: 'dxe8=N' },
+    ] });
+    await mic.click();
+    await speak('de');
+    assert.equal((await submitted()).length, 0, 'Even a single promotion option requires a spoken piece');
+    await speak('d e knight');
+    assert.equal((await submitted())[0].promotion, 'N');
+    assert.equal(await status.textContent(), 'Sent dxe8=N');
+    console.log('✓ Rankless capture promotions require and preserve the requested piece');
 
     await reset();
     await mic.click();

@@ -43,8 +43,8 @@
 ## Move handling
 
 - Only final recognition results may submit moves. Interim results are for display.
-- Require standard algebraic notation (SAN) for moves: `e4`, `Nf3`, `Qxh7`, `Ngf3`, `O-O`, `e8=Q`. Spoken piece names, ranks, and notation symbols may normalize to SAN (e.g. “knight f three” → `Nf3`). Reject source/destination commands, NATO files, extra filler, and multiple moves in one utterance.
-- Match the board's own legal SAN, including capture markers, required disambiguation, and explicit promotion. Check/mate suffixes may be omitted; when supplied they must match. Do not implement a second rules engine or infer legality from piece movement geometry.
+- Accept standard algebraic notation (SAN) for moves (`e4`, `Nf3`, `Qxh7`, `Ngf3`, `O-O`, `e8=Q`) and documented shorthand. Spoken piece names, ranks, and notation symbols may normalize to SAN (e.g. “knight f three” → `Nf3`). Support omitted capture markers, pawn capture file pairs (`de`), castling phrases, and omitted promotion equals signs. Reject source/destination commands, NATO files, extra filler, and multiple moves in one utterance.
+- Resolve requests against the board's own complete legal SAN. Shorthand must identify one move; show the matching SAN choices when ambiguous. Explicit capture markers must match captures, pawn captures still require both files, and promotion pieces remain mandatory. Check/mate suffixes may be omitted; when supplied they must match. Do not implement a second rules engine or infer legality from piece movement geometry.
 - Never pick between ambiguous source pieces. Show the matching disambiguated SAN choices and leave the board untouched.
 - Confirm the board instance and FEN still match the snapshot immediately before submission. Block moves on idle, disabled, animating, finished, or opponent-turn positions.
 - Submit through the board's ordinary input handling with `userGenerated: true`. Preserve the native promotion representation; require a promotion piece in the requested SAN, including for queen promotion.
