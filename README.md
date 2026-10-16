@@ -1,4 +1,4 @@
-# Voice Chess
+# Puzzle Rush Voice
 
 A minimal browser extension for **Chess.com Puzzle Rush**. Click the microphone, speak a move in standard algebraic notation (SAN) or common shorthand, keep solving.
 
@@ -10,7 +10,7 @@ Vanilla JavaScript, HTML, CSS, and Manifest V3, with a bundled [Vosk](https://al
 2. In **Google Chrome**, open `chrome://extensions` and turn on **Developer mode**.
 3. Click **Load unpacked** and select this repository's **`extension/`** folder.
 4. Open [Puzzle Rush](https://www.chess.com/puzzles/rush), or reload it if it is already open.
-5. Start a rush. Click the Voice Chess microphone below the board or in a clear corner of the window and allow microphone access for Chess.com. If every visible position would cover the board or page controls, scroll down to the control at the end of the page.
+5. Start a rush. Click the Puzzle Rush Voice microphone below the board or in a clear corner of the window and allow microphone access for Chess.com. If every visible position would cover the board or page controls, scroll down to the control at the end of the page.
 6. Wait for **Listening · offline**, then say one move. The bundled model loads into memory when you start listening.
 
 No Node installation or npm command is needed for normal use. The bundled model and runtime add about **46 MB** to the unpacked extension. There is no download button or additional setup. Google Chrome is the primary target; other Chromium browsers may work but are not fully verified. Firefox is not supported.
@@ -62,7 +62,7 @@ The microphone stays armed between moves and puzzles. It switches off when you h
 
 ## Privacy and troubleshooting
 
-Speech recognition is **offline**: the JavaScript/WASM runtime and US English model are bundled in `extension/vendor/`. Audio stays on the device. Voice Chess does not use Chrome's network speech service, upload audio, persist transcripts, store recordings, or introduce telemetry. PCM is processed in memory and discarded. Model files are unpacked into worker memory; they are not copied to IndexedDB. Chess.com itself still requires its usual internet connection.
+Speech recognition is **offline**: the JavaScript/WASM runtime and US English model are bundled in `extension/vendor/`. Audio stays on the device. Puzzle Rush Voice does not use Chrome's network speech service, upload audio, persist transcripts, store recordings, or introduce telemetry. PCM is processed in memory and discarded. Model files are unpacked into worker memory; they are not copied to IndexedDB. Chess.com itself still requires its usual internet connection.
 
 The extension declares no additional API permissions. Scripts inject only on the standard `https://www.chess.com/puzzles/rush` route. The board adapter and UI run in the page's JavaScript world to reach its board API; a small isolated script connects them to a packaged extension frame. Only `recognizer.html` is web-accessible to Chess.com. The extension CSP permits packaged WebAssembly without allowing JavaScript `eval` or remote code. Microphone permission belongs to the puzzle page and is requested only after clicking the control. The toolbar popup simply opens Puzzle Rush.
 
@@ -105,4 +105,10 @@ extension/
 tests/            Unit tests, browser fixtures and real-decoder smoke check
 ```
 
-After editing, click **Reload** for Voice Chess in `chrome://extensions`, then refresh Puzzle Rush. No production build is required. To regenerate PNG icons from the SVG, run `node scripts/icons.cjs`.
+After editing, click **Reload** for Puzzle Rush Voice in `chrome://extensions`, then refresh Puzzle Rush. No production build is required. To regenerate PNG icons from the SVG, run `node scripts/icons.cjs`.
+
+## Copyright
+
+Copyright © 2026 Leon Lee.
+
+Bundled third-party components retain their respective copyrights and licenses. See [third-party assets and licenses](extension/vendor/README.md) for details.

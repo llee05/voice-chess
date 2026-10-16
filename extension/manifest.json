@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Voice Chess",
+  "name": "Puzzle Rush Voice",
   "version": "1.0.0",
   "description": "Move pieces with your voice in Chess.com Puzzle Rush.",
   "minimum_chrome_version": "111",
@@ -10,7 +10,7 @@
     "128": "icons/128.png"
   },
   "action": {
-    "default_title": "Voice Chess · Puzzle Rush",
+    "default_title": "Puzzle Rush Voice",
     "default_popup": "popup.html"
   },
   "content_security_policy": {

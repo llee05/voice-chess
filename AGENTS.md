@@ -9,7 +9,7 @@
 
 ## Product and stack
 
-- Voice Chess is a browser extension for **Chess.com Puzzle Rush**. The former Android app has been removed.
+- Puzzle Rush Voice is a browser extension for **Chess.com Puzzle Rush**. The former Android app has been removed.
 - Keep the app minimal: vanilla JavaScript, HTML, CSS, Manifest V3, and the browser's Web Speech API. The `extension/` folder is directly loadable, with no build step or runtime dependencies.
 - Avoid adding frameworks, bundlers, backend services, API keys, or runtime dependencies unless the requested feature needs them. Playwright is a development-only dependency.
 - Google Chrome is the primary target. Other Chromium browsers may lack a working speech service. Firefox is not currently supported; do not claim support without implementing and verifying it.

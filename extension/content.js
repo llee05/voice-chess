@@ -31,9 +31,9 @@
       .privacy { margin: 0; padding: 0 14px 12px; color: #969c8c; font-size: 11px; }
       @media (max-width: 400px) { :host { right: 12px; bottom: 12px; } .panel { width: min(260px, calc(100vw - 24px)); } }
     </style>
-    <section class="panel" aria-label="Voice Chess">
+    <section class="panel" aria-label="Puzzle Rush Voice">
       <div class="main">
-        <div class="copy"><div class="title">Voice Chess</div><div class="status" role="status" aria-live="polite">Microphone off</div></div>
+        <div class="copy"><div class="title">Puzzle Rush Voice</div><div class="status" role="status" aria-live="polite">Microphone off</div></div>
         <button type="button" aria-label="Start listening" aria-pressed="false" title="Start listening">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg>
         </button>

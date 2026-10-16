@@ -14,7 +14,7 @@
     const frame = document.createElement('iframe');
     frame.hidden = true;
     frame.style.setProperty('display', 'none', 'important');
-    frame.title = 'Voice Chess local recognizer';
+    frame.title = 'Puzzle Rush Voice local recognizer';
     const url = chrome.runtime.getURL('recognizer.html');
     frame.src = url;
     current = { frame, session };
