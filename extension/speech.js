@@ -83,13 +83,13 @@ const VoiceChessSpeech = class {
   refreshVocabulary(force = false) {
     if (!this.active || !this.processor || !this.connection) return;
     try {
-      const { key, phrases } = this.getVocabulary();
+      const { key, phrases, queuePhrases } = this.getVocabulary();
       if (!force && this.vocabularyKey === key) return;
       this.vocabularyKey = key;
       this.phrases = new Set(phrases);
       this.readyEpoch = null;
       this.connection.port.postMessage({ type: 'configure', epoch: ++this.epoch,
-        sampleRate: this.context.sampleRate, phrases: [...this.phrases] });
+        sampleRate: this.context.sampleRate, phrases: [...this.phrases], ...(queuePhrases ? { queuePhrases } : {}) });
     } catch { this.stop('Could not prepare the move vocabulary. Click the mic to retry.'); }
   }
 

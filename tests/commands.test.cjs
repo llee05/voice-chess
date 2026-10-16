@@ -354,7 +354,7 @@ test('spoken vocabulary preserves check on castling and uses separate mate words
 test('missing or nonstandard legal SAN produces only queue and microphone controls, without invented hints', () => {
   const controls = Array.from(vocabulary([]));
   assert.ok(controls.length > 0);
-  assert.ok(controls.every(phrase => ['stop', 'clearQueue', 'beginQueue'].includes(parse(phrase).kind)));
+  assert.ok(controls.every(phrase => ['stop', 'clearQueue'].includes(parse(phrase).kind)));
   assert.deepEqual(Array.from(vocabulary([{ from: 'g1', to: 'f3' }])), controls);
   assert.deepEqual(Array.from(vocabulary([move('96', 'f4', 'e6')])), controls);
 });
@@ -366,11 +366,10 @@ test('explicit queue commands and then-separated moves preserve requested order'
   assert.deepEqual(plain(parse('queue e8 knight')), { kind: 'queue', moves: [{ kind: 'move', san: 'e8=N' }] });
   assert.deepEqual(plain(parse('castle then d e')), { kind: 'queue', moves: [{ kind: 'move', san: 'castle' }, { kind: 'move', san: 'dxe' }] });
   for (const text of ['clear queue', 'cancel queue']) assert.equal(parse(text).kind, 'clearQueue');
-  for (const text of ['queue', 'premove']) assert.equal(parse(text).kind, 'beginQueue');
 });
 
 test('rejects an entire malformed or oversized chain before executing any part', () => {
-  for (const text of ['queue stop', 'queue clear queue', 'queue queue e4', 'e4 then', 'then e4',
+  for (const text of ['queue', 'premove', 'queue stop', 'queue clear queue', 'queue queue e4', 'e4 then', 'then e4',
     'e4 then then Nf3', 'e4 then please Nf3', 'e4 then e2e4', 'e4 and Nf3', 'e4, Nf3',
     'e4 then queue Nf3', 'e4 then stop', Array(7).fill('e4').join(' then ')]) {
     assert.equal(parse(text), null, text);

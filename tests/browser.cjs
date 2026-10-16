@@ -37,10 +37,19 @@ const path = require('node:path');
     }
     async function speak(text, final = true, words) {
       const frame = engine();
+      if (final) {
+        // Give the port's ready event time to arrive, then supply an audio chunk
+        // so automatic chain re-decoding exercises the real buffering path.
+        await page.waitForTimeout(50);
+        const received = await frame.evaluate(() => fakeRecognizers.at(-1).audio.length);
+        await page.evaluate(() => audioProcessor.onaudioprocess({ inputBuffer: { getChannelData: () => new Float32Array(256) } }));
+        await frame.waitForFunction(count => fakeRecognizers.at(-1).audio.length > count, received);
+      }
       const count = await frame.evaluate(({ text, final, words }) => {
         const count = fakeRecognizers.length;
         fakeRecognizers.at(-1).emit(final ? 'result' : 'partialresult', text, words);
-        return count;
+        if (final && fakeRecognizers.length > count) fakeRecognizers.at(-1).emit('result', text, words);
+        return fakeRecognizers.length;
       }, { text, final, words });
       if (final && ['stop', 'pause', 'stop listening'].includes(text)) {
         await page.waitForFunction(() => document.querySelector('#voice-chess-control').shadowRoot.querySelector('button').getAttribute('aria-pressed') === 'false');
@@ -132,10 +141,8 @@ const path = require('node:path');
       await reset({ fen: `4k3/8/8/8/8/8/8/4KBN1 ${opponent ? 'b' : 'w'} - - 0 1`,
         moves: [{ from: 'g1', to: 'f3', san: 'Nf3' }], replyMoves: [{ from: 'e8', to: 'e7', san: 'Ke7' }] });
       await start();
-      assert.equal((await grammar()).includes('bishop c four'), false, 'Future notation must not expand ordinary recognition');
-      await speak('queue');
-      assert.equal(await page.locator('#voice-chess-control .queue-entry').getAttribute('aria-pressed'), 'true');
-      assert.equal((await grammar()).includes('bishop c four'), true);
+      assert.equal((await grammar()).includes('bishop c four'), opponent, 'Broad notation is used immediately only while waiting to premove');
+      assert.equal(await page.locator('#voice-chess-control .queue-entry').count(), 0);
     }
     const queued = page.locator('#voice-chess-control .queued');
     await queuePosition();
@@ -148,8 +155,6 @@ const path = require('node:path');
     assert.equal((await submitted()).length, 0, 'A low-confidence future file rejects the entire chain');
     await speak(chain);
     assert.equal((await submitted()).length, 1);
-    assert.equal(await page.locator('#voice-chess-control .queue-entry').getAttribute('aria-pressed'), 'false');
-    assert.equal((await grammar()).includes('bishop c four'), false);
     assert.match(await queued.textContent(), /Bc4/);
     await page.waitForTimeout(150);
     assert.equal((await submitted()).length, 1, 'A premove must wait for the opponent');
@@ -169,7 +174,6 @@ const path = require('node:path');
     for (const cancel of ['clear queue', 'cancel queue', 'button', 'stop']) {
       await queuePosition(true);
       await speak('queue knight f three');
-      await speak('queue');
       await speak('premove bishop c four');
       assert.equal((await submitted()).length, 0);
       assert.match(await queued.textContent(), /Nf3 → Bc4/);
@@ -203,16 +207,13 @@ const path = require('node:path');
     assert.equal(await mic.getAttribute('aria-pressed'), 'false');
 
     await queuePosition(true);
-    const entry = page.locator('#voice-chess-control .queue-entry');
-    const entryFrame = engine();
-    const oldRecognizer = await entryFrame.evaluate(() => fakeRecognizers.length - 1);
-    await entry.focus(); await entry.press('Enter');
-    await entryFrame.waitForFunction(index => fakeRecognizers.length > index + 1, oldRecognizer);
-    await entryFrame.evaluate(({ index, chain }) => fakeRecognizers[index].emit('result', chain), { index: oldRecognizer, chain });
+    await speak('knight f three');
+    await speak('bishop c four');
     assert.equal((await submitted()).length, 0);
-    assert.equal(await queued.isVisible(), false, 'Cancelling entry discards results from its old recognizer');
-    await entry.press('Space');
-    await entryFrame.waitForFunction(() => fakeRecognizers.at(-1).grammar.includes('bishop c four'));
+    assert.match(await queued.textContent(), /Nf3 → Bc4/, 'Separate moves automatically append while waiting for the opponent');
+    const clear = page.locator('#voice-chess-control .clear-queue');
+    await clear.focus(); await clear.press('Enter');
+    assert.equal(await queued.isVisible(), false);
     await speak('knight f three then bishop c four then queen h seven');
     await page.setViewportSize({ width: 390, height: 500 });
     await page.locator('#voice-chess-control').scrollIntoViewIfNeeded();

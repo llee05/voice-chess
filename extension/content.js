@@ -28,7 +28,6 @@
       .queued[hidden] { display: none; }
       .queue-copy { flex: 1; min-width: 0; }
       .clear-queue { width: auto; height: auto; padding: 4px 8px; border-radius: 6px; font: inherit; }
-      .queue-entry { width: auto; height: auto; border-radius: 6px; font: inherit; margin: 0 14px 12px; padding: 4px 8px; }
       .privacy { margin: 0; padding: 0 14px 12px; color: #969c8c; font-size: 11px; }
       @media (max-width: 400px) { :host { right: 12px; bottom: 12px; } .panel { width: min(260px, calc(100vw - 24px)); } }
     </style>
@@ -40,7 +39,6 @@
         </button>
       </div>
       <div class="transcript"></div>
-      <button class="queue-entry" type="button" aria-pressed="false" disabled>Queue moves</button>
       <div class="queued" hidden><span class="queue-copy" aria-live="polite"></span><button class="clear-queue" type="button" aria-label="Clear queued moves">Clear</button></div>
       <p class="privacy">Offline speech · bundled English model</p>
     </section>`;
@@ -52,15 +50,7 @@
   const toggle = root.querySelector('button');
   const queued = root.querySelector('.queued');
   const queueCopy = root.querySelector('.queue-copy');
-  const queueWords = VoiceChessCommands.queueVocabulary();
-  const queueEntryButton = root.querySelector('.queue-entry');
-  let queueEntry = false;
-  function enterQueue(active) {
-    queueEntry = active;
-    queueEntryButton.setAttribute('aria-pressed', String(active));
-    queueEntryButton.textContent = active ? 'Cancel queue entry' : 'Queue moves';
-    if (active) status.textContent = 'Queue moves: say your moves separated by “then”.';
-  }
+  const queueWords = [...VoiceChessCommands.vocabulary([]), ...VoiceChessCommands.queueVocabulary()];
   const moves = new VoiceChessQueue({
     read: () => VoiceChessBoard.observe(),
     resolve: VoiceChessCommands.resolve,
@@ -74,7 +64,6 @@
   });
   let vocabularyPosition = null;
   let vocabularyVersion = 0;
-  let vocabularyQueueEntry = false;
   let vocabularyPhrases = VoiceChessCommands.vocabulary([]);
 
   const speech = new VoiceChessSpeech({
@@ -82,35 +71,35 @@
       let position = null;
       try { position = VoiceChessBoard.observe(); } catch { /* No board moves while unavailable. */ }
       if (position?.element !== vocabularyPosition?.element || position?.game !== vocabularyPosition?.game || position?.fen !== vocabularyPosition?.fen ||
-        position?.waiting !== vocabularyPosition?.waiting || position?.player !== vocabularyPosition?.player || vocabularyQueueEntry !== queueEntry) {
+        position?.waiting !== vocabularyPosition?.waiting || position?.player !== vocabularyPosition?.player) {
         vocabularyPosition = position;
-        vocabularyQueueEntry = queueEntry;
         vocabularyVersion++;
-        vocabularyPhrases = [...VoiceChessCommands.vocabulary(!position?.waiting ? position?.moves ?? [] : []), ...(queueEntry ? queueWords : [])];
+        const legalPhrases = VoiceChessCommands.vocabulary(position?.moves ?? []);
+        vocabularyPhrases = position?.waiting ? queueWords : [...legalPhrases, ...legalPhrases.filter(phrase => VoiceChessCommands.parse(phrase)?.kind === 'move').map(phrase => `${phrase} then`), 'then', 'queue', 'premove'];
       }
-      return { key: vocabularyVersion, phrases: vocabularyPhrases };
+      return { key: vocabularyVersion, phrases: vocabularyPhrases, queuePhrases: queueWords };
     },
     onState(active, message) {
       toggle.setAttribute('aria-pressed', String(active));
       const label = active ? 'Stop listening' : 'Start listening';
       toggle.setAttribute('aria-label', label);
       toggle.title = label;
-      queueEntryButton.disabled = !active;
       status.textContent = message;
       if (!active) {
-        enterQueue(false);
         moves.reset();
       }
     },
     onTranscript(text) { transcript.textContent = text; },
-    acceptsQueue(text) { return queueEntry && ['queue', 'move'].includes(VoiceChessCommands.parse(text)?.kind); },
+    acceptsQueue(text) {
+      const kind = VoiceChessCommands.parse(text)?.kind;
+      return kind === 'queue' || (Boolean(vocabularyPosition?.waiting) && kind === 'move');
+    },
     onCommand(text, alternatives = [text]) {
       if (!isRush() || document.hidden) return;
       const candidates = alternatives.slice(0, 5);
       const commands = candidates.map(candidate => VoiceChessCommands.parse(candidate));
       if (commands.some(command => command?.kind === 'stop')) { speech.stop(); return; }
-      if (commands.some(command => command?.kind === 'beginQueue')) { enterQueue(true); return; }
-      if (commands.some(command => command?.kind === 'clearQueue')) { enterQueue(false); moves.clear('Queue cleared.'); return; }
+      if (commands.some(command => command?.kind === 'clearQueue')) { moves.clear('Queue cleared.'); return; }
       const chains = commands.filter(command => command?.kind === 'queue');
       if (chains.length) {
         // Never choose between different interpretations of an entire chain.
@@ -118,38 +107,33 @@
           status.textContent = 'Unclear move sequence. Say the queue again.';
           return;
         }
-        enterQueue(false);
         moves.append(chains[0].moves);
         return;
       }
       if (!commands.some(command => command?.kind === 'move')) { status.textContent = 'Use standard notation or shorthand: Nf3, “d e”, or “castle”.'; return; }
-      if (queueEntry) {
-        if (new Set(commands.filter(command => command?.kind === 'move').map(command => command.san)).size !== 1) {
-          status.textContent = 'Unclear move sequence. Say the queue again.';
+      try {
+        const observed = VoiceChessBoard.observe();
+        if (observed.waiting || moves.moves.length || moves.pending) {
+          if (moves.pending?.position.fen === observed.fen) {
+            const repeated = VoiceChessCommands.resolveAlternatives(candidates, moves.pending.position.moves);
+            if (repeated.move === moves.pending.move) return;
+          }
+          const requested = commands.filter(command => command?.kind === 'move');
+          if (new Set(requested.map(command => command.san)).size !== 1) { status.textContent = 'Unclear premove. Say the move again.'; return; }
+          moves.append([requested[0]]);
           return;
         }
-        enterQueue(false);
-        moves.append([commands.find(command => command?.kind === 'move')]);
-        return;
-      }
-      try {
         const position = VoiceChessBoard.snapshot();
         const result = VoiceChessCommands.resolveAlternatives(candidates, position.moves);
         if (result.error) { status.textContent = result.error; return; }
         if (result.transcript !== text) transcript.textContent = `${text} → ${result.transcript}`;
-        if (moves.moves.length) moves.clear(); // A fresh immediate move replaces the remaining plan.
         moves.send(position, result.move);
       } catch (error) {
         status.textContent = error.message || 'Could not read this board.';
       }
     },
   });
-  root.querySelector('.clear-queue').addEventListener('click', () => { enterQueue(false); moves.clear('Queue cleared.'); speech.refreshVocabulary(true); });
-  queueEntryButton.addEventListener('click', () => {
-    enterQueue(!queueEntry);
-    if (!queueEntry) status.textContent = 'Listening · offline';
-    speech.refreshVocabulary(true);
-  });
+  root.querySelector('.clear-queue').addEventListener('click', () => moves.clear('Queue cleared.'));
   setInterval(() => {
     if (speech.active && isRush() && !document.hidden) moves.tick();
   }, 50);

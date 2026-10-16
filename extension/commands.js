@@ -50,7 +50,6 @@ const VoiceChessCommands = (() => {
     if (typeof transcript !== 'string' || transcript.length > 160) return null;
     let text = transcript.trim().replace(/\.$/, '').trim();
     if (/^(stop|pause|stop listening|pause listening|microphone off)$/i.test(text)) return { kind: 'stop' };
-    if (/^(queue|premove)$/i.test(text)) return { kind: 'beginQueue' };
     if (/^(clear|cancel) queue$/i.test(text)) return { kind: 'clearQueue' };
     const queued = /^(queue|premove)\s+/i.test(text);
     if (queued || /\bthen\b/i.test(text)) {
@@ -142,7 +141,7 @@ const VoiceChessCommands = (() => {
   }
 
   function vocabulary(legalMoves) {
-    const phrases = new Set(['stop', 'pause', 'stop listening', 'pause listening', 'microphone off', 'queue', 'premove', 'clear queue', 'cancel queue']);
+    const phrases = new Set(['stop', 'pause', 'stop listening', 'pause listening', 'microphone off', 'clear queue', 'cancel queue']);
     const entries = legalMoves.map(move => ({ move, notation: readSan(move.san ?? '') }));
     if (entries.some(entry => !entry.notation)) return [...phrases];
     const unique = entries.filter(({ move }, index) => entries.findIndex(entry => entry.move.from === move.from && entry.move.to === move.to && entry.move.promotion === move.promotion) === index);
@@ -182,8 +181,8 @@ const VoiceChessCommands = (() => {
     return [...phrases];
   }
 
-  // Future positions are unknown. This syntax vocabulary is enabled only
-  // while entering a queue and never supplies legal-move suggestions.
+  // Future positions are unknown. This syntax vocabulary decodes detected
+  // chains and premoves; it never supplies legal-move suggestions.
   function queueVocabulary() {
     const phrases = new Set(['check mate', 'castle', 'short castle', 'long castle', 'castle king side', 'castle queen side']);
     const files = Array.from('abcdefgh');

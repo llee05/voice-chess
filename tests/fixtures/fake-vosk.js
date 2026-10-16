@@ -3,14 +3,14 @@
 if (location.protocol === 'chrome-extension:') {
   window.fakeRecognizers = [];
   class Recognizer {
-    constructor(rate, grammar) { this.sampleRate = rate; this.grammar = JSON.parse(grammar); this.listeners = {}; window.fakeRecognizers.push(this); }
+    constructor(rate, grammar) { this.sampleRate = rate; this.grammar = JSON.parse(grammar); this.listeners = {}; this.audio = []; window.fakeRecognizers.push(this); }
     on(type, listener) { this.listeners[type] = listener; }
     setWords(enabled) { this.words = enabled; }
     emit(type, text, words = text.split(' ').map(word => ({ word, conf: 1 }))) {
       this.listeners[type]?.({ result: type === 'result' ? { text, result: this.words ? words : undefined } : { partial: text } });
     }
     remove() { this.removed = true; }
-    acceptWaveformFloat() {}
+    acceptWaveformFloat(data) { this.audio.push(data); }
   }
   const fake = { Model: class {
     constructor() { this.ready = true; this.worker = { addEventListener() {}, terminate() {} }; }

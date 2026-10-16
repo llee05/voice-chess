@@ -108,8 +108,6 @@ const path = require('node:path');
     await position('4k3/8/8/8/8/8/8/4KBN1 w - - 0 1', [{ from: 'g1', to: 'f3', san: 'Nf3' }]);
     await mic.click();
     await page.waitForFunction(() => document.querySelector('#voice-chess-control').shadowRoot.querySelector('.status').textContent === 'Listening · offline', null, { timeout: 60000 });
-    await audio('queue');
-    await page.waitForFunction(() => document.querySelector('#voice-chess-control').shadowRoot.querySelector('.queue-entry').getAttribute('aria-pressed') === 'true', null, { timeout: 10000 }).catch(async error => { console.error('Queue entry:', await transcript.textContent(), await status.textContent()); throw error; });
     await audio('knight-f-three-then-bishop-c-four');
     await page.waitForFunction(() => fixture.submitted.length === 1, null, { timeout: 10000 }).catch(async error => { console.error('Chain:', await transcript.textContent(), await status.textContent()); throw error; });
     assert.equal((await submitted())[0].to, 'f3');
@@ -123,7 +121,7 @@ const path = require('node:path');
     await mic.click();
     assert.deepEqual(remote, []);
     assert.deepEqual(errors, []);
-    console.log('✓ Real decoder enters queue mode and chains synthetic speech across an observed opponent reply');
+    console.log('✓ Real decoder automatically chains synthetic speech across an observed opponent reply, without queue entry');
 
     await page.goto('https://www.chess.com/puzzles/rush?capture=real');
     await page.locator('#voice-chess-control').waitFor();
