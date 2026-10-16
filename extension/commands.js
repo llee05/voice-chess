@@ -50,6 +50,15 @@ const VoiceChessCommands = (() => {
     if (typeof transcript !== 'string' || transcript.length > 160) return null;
     let text = transcript.trim().replace(/\.$/, '').trim();
     if (/^(stop|pause|stop listening|pause listening|microphone off)$/i.test(text)) return { kind: 'stop' };
+    if (/^(queue|premove)$/i.test(text)) return { kind: 'beginQueue' };
+    if (/^(clear|cancel) queue$/i.test(text)) return { kind: 'clearQueue' };
+    const queued = /^(queue|premove)\s+/i.test(text);
+    if (queued || /\bthen\b/i.test(text)) {
+      const parts = text.replace(/^(queue|premove)\s+/i, '').split(/\s+then\s+/i);
+      if (parts.length > 6 || parts.some(part => /\b(queue|premove|then)\b/i.test(part))) return null;
+      const moves = parts.map(part => parse(part));
+      return moves.every(move => move?.kind === 'move') ? { kind: 'queue', moves } : null;
+    }
     // Accept the reported queen mishearing wherever the normal grammar allows it.
     text = text.replace(/\bquinn\b/gi, 'queen');
     // Observed recognizer errors: "nothing g5" for "knight takes g5", and
@@ -133,7 +142,7 @@ const VoiceChessCommands = (() => {
   }
 
   function vocabulary(legalMoves) {
-    const phrases = new Set(['stop', 'pause', 'stop listening', 'pause listening', 'microphone off']);
+    const phrases = new Set(['stop', 'pause', 'stop listening', 'pause listening', 'microphone off', 'queue', 'premove', 'clear queue', 'cancel queue']);
     const entries = legalMoves.map(move => ({ move, notation: readSan(move.san ?? '') }));
     if (entries.some(entry => !entry.notation)) return [...phrases];
     const unique = entries.filter(({ move }, index) => entries.findIndex(entry => entry.move.from === move.from && entry.move.to === move.to && entry.move.promotion === move.promotion) === index);
@@ -173,5 +182,49 @@ const VoiceChessCommands = (() => {
     return [...phrases];
   }
 
-  return Object.freeze({ parse, resolve, resolveAlternatives, vocabulary });
+  // Future positions are unknown. This syntax vocabulary is enabled only
+  // while entering a queue and never supplies legal-move suggestions.
+  function queueVocabulary() {
+    const phrases = new Set(['check mate', 'castle', 'short castle', 'long castle', 'castle king side', 'castle queen side']);
+    const files = Array.from('abcdefgh');
+    const ranks = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'];
+    const pieces = ['king', 'queen', 'rook', 'bishop', 'knight'];
+    for (const file of files) {
+      for (const rank of ranks) {
+        phrases.add(`${file} ${rank}`);
+        for (const piece of pieces) {
+          phrases.add(`${piece} ${file} ${rank}`);
+          phrases.add(`${piece} takes ${file} ${rank}`);
+        }
+        for (const origin of files) {
+          phrases.add(`${origin} ${file} ${rank}`);
+          phrases.add(`${origin} takes ${file} ${rank}`);
+        }
+        // Source-rank and full-square SAN disambiguation.
+        phrases.add(`rook ${rank} ${file} one`);
+      }
+      for (const other of files) {
+        phrases.add(`${file} ${other}`);
+        phrases.add(`${file} takes ${other}`);
+      }
+    }
+    for (const piece of pieces) {
+      for (const prefix of ['queue', 'premove', 'then']) phrases.add(`${prefix} ${piece} f three`);
+      for (const rank of ranks) phrases.add(`${piece} ${rank} a one`);
+    }
+    for (const file of files) for (const rank of ['one', 'eight']) for (const piece of pieces.filter(piece => piece !== 'king')) {
+      phrases.add(`${file} ${rank} ${piece}`);
+      phrases.add(`${file} ${rank} equals ${piece}`);
+      phrases.add(`${file} a ${piece}`);
+    }
+    for (const prefix of ['queue', 'premove', 'then']) {
+      for (const file of files) phrases.add(`${prefix} ${file} four`);
+      phrases.add(`${prefix} castle`);
+    }
+    for (const ending of [...ranks, ...pieces, ...files, 'check', 'mate', 'castle', 'side']) phrases.add(`${ending} then`);
+    for (const ending of [...ranks, ...pieces, 'castle', 'side']) phrases.add(`${ending} check`);
+    return [...phrases];
+  }
+
+  return Object.freeze({ parse, resolve, resolveAlternatives, vocabulary, queueVocabulary });
 })();

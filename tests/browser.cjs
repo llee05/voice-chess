@@ -128,6 +128,101 @@ const path = require('node:path');
     assert.equal(await status.textContent(), 'Sent g4');
     console.log('✓ Uncertain e/c/g files require repetition; a clear repeat submits g4');
 
+    async function queuePosition(opponent = false) {
+      await reset({ fen: `4k3/8/8/8/8/8/8/4KBN1 ${opponent ? 'b' : 'w'} - - 0 1`,
+        moves: [{ from: 'g1', to: 'f3', san: 'Nf3' }], replyMoves: [{ from: 'e8', to: 'e7', san: 'Ke7' }] });
+      await start();
+      assert.equal((await grammar()).includes('bishop c four'), false, 'Future notation must not expand ordinary recognition');
+      await speak('queue');
+      assert.equal(await page.locator('#voice-chess-control .queue-entry').getAttribute('aria-pressed'), 'true');
+      assert.equal((await grammar()).includes('bishop c four'), true);
+    }
+    const queued = page.locator('#voice-chess-control .queued');
+    await queuePosition();
+    await speak('knight f three then bishop c four', false);
+    assert.equal((await submitted()).length, 0);
+    await speak('knight f three then please bishop c four');
+    assert.equal((await submitted()).length, 0, 'A malformed chain must not submit its first move');
+    const chain = 'knight f three then bishop c four';
+    await speak(chain, true, chain.split(' ').map(word => ({ word, conf: word === 'c' ? 0.6 : 1 })));
+    assert.equal((await submitted()).length, 0, 'A low-confidence future file rejects the entire chain');
+    await speak(chain);
+    assert.equal((await submitted()).length, 1);
+    assert.equal(await page.locator('#voice-chess-control .queue-entry').getAttribute('aria-pressed'), 'false');
+    assert.equal((await grammar()).includes('bishop c four'), false);
+    assert.match(await queued.textContent(), /Bc4/);
+    await page.waitForTimeout(150);
+    assert.equal((await submitted()).length, 1, 'A premove must wait for the opponent');
+    await page.evaluate(() => {
+      fixture.fen = '8/4k3/8/8/8/5N2/8/4KB2 w - - 1 2';
+      fixture.moves = [{ from: 'f1', to: 'c4', san: 'Bc4' }];
+      fixture.animating = true;
+    });
+    await page.waitForTimeout(150);
+    assert.equal((await submitted()).length, 1, 'A premove must wait for animation');
+    await page.evaluate(() => { fixture.animating = false; });
+    await page.waitForFunction(() => fixture.submitted.length === 2);
+    assert.equal((await submitted())[1].to, 'c4');
+    assert.equal((await submitted())[1].userGenerated, true);
+    assert.equal(await queued.isVisible(), false);
+
+    for (const cancel of ['clear queue', 'cancel queue', 'button', 'stop']) {
+      await queuePosition(true);
+      await speak('queue knight f three');
+      await speak('queue');
+      await speak('premove bishop c four');
+      assert.equal((await submitted()).length, 0);
+      assert.match(await queued.textContent(), /Nf3 → Bc4/);
+      if (cancel === 'button') await page.locator('#voice-chess-control .clear-queue').click();
+      else await speak(cancel);
+      assert.equal(await queued.isVisible(), false);
+      await page.evaluate(() => {
+        fixture.fen = '8/4k3/8/8/8/8/8/4KBN1 w - - 1 2';
+      });
+      await page.waitForTimeout(150);
+      assert.equal((await submitted()).length, 0, 'Cancelled premoves must not resume on the next turn');
+    }
+
+    await queuePosition(); await speak(chain);
+    await page.waitForTimeout(150);
+    await page.evaluate(() => {
+      // A new puzzle may reuse both the same board element and game object.
+      fixture.fen = '4k3/8/8/8/8/8/8/4KBN1 w - - 0 1';
+      fixture.moves = [{ from: 'f1', to: 'c4', san: 'Bc4' }];
+    });
+    await page.waitForFunction(() => document.querySelector('#voice-chess-control').shadowRoot.querySelector('.queued').hidden);
+    assert.equal((await submitted()).length, 1, 'A puzzle reset cancels even a legal remaining move');
+    assert.match(await status.textContent(), /Queue cleared/);
+
+    await queuePosition(true); await speak('queue knight f three');
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    assert.equal(await queued.isVisible(), false);
+    assert.equal(await mic.getAttribute('aria-pressed'), 'false');
+
+    await queuePosition(true);
+    const entry = page.locator('#voice-chess-control .queue-entry');
+    const entryFrame = engine();
+    const oldRecognizer = await entryFrame.evaluate(() => fakeRecognizers.length - 1);
+    await entry.focus(); await entry.press('Enter');
+    await entryFrame.waitForFunction(index => fakeRecognizers.length > index + 1, oldRecognizer);
+    await entryFrame.evaluate(({ index, chain }) => fakeRecognizers[index].emit('result', chain), { index: oldRecognizer, chain });
+    assert.equal((await submitted()).length, 0);
+    assert.equal(await queued.isVisible(), false, 'Cancelling entry discards results from its old recognizer');
+    await entry.press('Space');
+    await entryFrame.waitForFunction(() => fakeRecognizers.at(-1).grammar.includes('bishop c four'));
+    await speak('knight f three then bishop c four then queen h seven');
+    await page.setViewportSize({ width: 390, height: 500 });
+    await page.locator('#voice-chess-control').scrollIntoViewIfNeeded();
+    await page.locator('#voice-chess-control .clear-queue').scrollIntoViewIfNeeded();
+    const queueBounds = await queued.boundingBox();
+    assert.ok(queueBounds.x >= 0 && queueBounds.x + queueBounds.width <= 390, 'Queue must fit a narrow viewport');
+    await page.locator('#voice-chess-control .clear-queue').click();
+    await page.setViewportSize({ width: 1280, height: 800 });
+    console.log('✓ Final-only chains, future syntax, turn/animation waits, cancellation, puzzle resets and hidden-tab cleanup');
+
     await reset({ fen: '6k1/8/8/8/4N3/8/8/4K3 w - - 0 1', moves: [{ from: 'e4', to: 'g5', san: 'Ng5' }] });
     await start(); await speak('knight takes g five');
     assert.equal((await submitted()).length, 0);

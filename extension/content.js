@@ -24,6 +24,11 @@
       svg { width: 19px; height: 19px; }
       .transcript { margin: 0 14px 12px; color: #dce5ce; font-size: 13px; overflow-wrap: anywhere; }
       .transcript:empty { display: none; }
+      .queued { display: flex; gap: 8px; align-items: center; margin: 0 14px 12px; color: #dce5ce; overflow-wrap: anywhere; }
+      .queued[hidden] { display: none; }
+      .queue-copy { flex: 1; min-width: 0; }
+      .clear-queue { width: auto; height: auto; padding: 4px 8px; border-radius: 6px; font: inherit; }
+      .queue-entry { width: auto; height: auto; border-radius: 6px; font: inherit; margin: 0 14px 12px; padding: 4px 8px; }
       .privacy { margin: 0; padding: 0 14px 12px; color: #969c8c; font-size: 11px; }
       @media (max-width: 400px) { :host { right: 12px; bottom: 12px; } .panel { width: min(260px, calc(100vw - 24px)); } }
     </style>
@@ -35,6 +40,8 @@
         </button>
       </div>
       <div class="transcript"></div>
+      <button class="queue-entry" type="button" aria-pressed="false" disabled>Queue moves</button>
+      <div class="queued" hidden><span class="queue-copy" aria-live="polite"></span><button class="clear-queue" type="button" aria-label="Clear queued moves">Clear</button></div>
       <p class="privacy">Offline speech · bundled English model</p>
     </section>`;
   // Stay outside Chess.com's body containers, which may clip or transform children.
@@ -43,23 +50,43 @@
   const status = root.querySelector('.status');
   const transcript = root.querySelector('.transcript');
   const toggle = root.querySelector('button');
-  let waitingPosition = null;
-  let submitting = false;
-  let lastSubmission = null;
-  let sessionVersion = 0;
-  let pendingCheck = null;
+  const queued = root.querySelector('.queued');
+  const queueCopy = root.querySelector('.queue-copy');
+  const queueWords = VoiceChessCommands.queueVocabulary();
+  const queueEntryButton = root.querySelector('.queue-entry');
+  let queueEntry = false;
+  function enterQueue(active) {
+    queueEntry = active;
+    queueEntryButton.setAttribute('aria-pressed', String(active));
+    queueEntryButton.textContent = active ? 'Cancel queue entry' : 'Queue moves';
+    if (active) status.textContent = 'Queue moves: say your moves separated by “then”.';
+  }
+  const moves = new VoiceChessQueue({
+    read: () => VoiceChessBoard.observe(),
+    resolve: VoiceChessCommands.resolve,
+    play: (position, move) => VoiceChessBoard.play(position, move),
+    follows: VoiceChessBoard.follows,
+    onStatus(message) { status.textContent = message; },
+    onQueue(commands) {
+      queued.hidden = !commands.length;
+      queueCopy.textContent = commands.length ? `Queued: ${commands.map(command => command.san).join(' → ')}` : '';
+    },
+  });
   let vocabularyPosition = null;
   let vocabularyVersion = 0;
+  let vocabularyQueueEntry = false;
   let vocabularyPhrases = VoiceChessCommands.vocabulary([]);
 
   const speech = new VoiceChessSpeech({
     getVocabulary() {
       let position = null;
-      try { position = VoiceChessBoard.snapshot(); } catch { /* Only stop controls while the board is unavailable. */ }
-      if (position?.element !== vocabularyPosition?.element || position?.game !== vocabularyPosition?.game || position?.fen !== vocabularyPosition?.fen) {
+      try { position = VoiceChessBoard.observe(); } catch { /* No board moves while unavailable. */ }
+      if (position?.element !== vocabularyPosition?.element || position?.game !== vocabularyPosition?.game || position?.fen !== vocabularyPosition?.fen ||
+        position?.waiting !== vocabularyPosition?.waiting || position?.player !== vocabularyPosition?.player || vocabularyQueueEntry !== queueEntry) {
         vocabularyPosition = position;
+        vocabularyQueueEntry = queueEntry;
         vocabularyVersion++;
-        vocabularyPhrases = VoiceChessCommands.vocabulary(position?.moves ?? []);
+        vocabularyPhrases = [...VoiceChessCommands.vocabulary(!position?.waiting ? position?.moves ?? [] : []), ...(queueEntry ? queueWords : [])];
       }
       return { key: vocabularyVersion, phrases: vocabularyPhrases };
     },
@@ -68,72 +95,74 @@
       const label = active ? 'Stop listening' : 'Start listening';
       toggle.setAttribute('aria-label', label);
       toggle.title = label;
+      queueEntryButton.disabled = !active;
       status.textContent = message;
       if (!active) {
-        sessionVersion++;
-        clearTimeout(pendingCheck);
-        pendingCheck = null;
-        waitingPosition = null;
+        enterQueue(false);
+        moves.reset();
       }
     },
     onTranscript(text) { transcript.textContent = text; },
+    acceptsQueue(text) { return queueEntry && ['queue', 'move'].includes(VoiceChessCommands.parse(text)?.kind); },
     onCommand(text, alternatives = [text]) {
       if (!isRush() || document.hidden) return;
       const candidates = alternatives.slice(0, 5);
       const commands = candidates.map(candidate => VoiceChessCommands.parse(candidate));
       if (commands.some(command => command?.kind === 'stop')) { speech.stop(); return; }
-      if (submitting) return;
+      if (commands.some(command => command?.kind === 'beginQueue')) { enterQueue(true); return; }
+      if (commands.some(command => command?.kind === 'clearQueue')) { enterQueue(false); moves.clear('Queue cleared.'); return; }
+      const chains = commands.filter(command => command?.kind === 'queue');
+      if (chains.length) {
+        // Never choose between different interpretations of an entire chain.
+        if (commands.some(command => command?.kind === 'move') || new Set(chains.map(command => JSON.stringify(command.moves))).size !== 1) {
+          status.textContent = 'Unclear move sequence. Say the queue again.';
+          return;
+        }
+        enterQueue(false);
+        moves.append(chains[0].moves);
+        return;
+      }
       if (!commands.some(command => command?.kind === 'move')) { status.textContent = 'Use standard notation or shorthand: Nf3, “d e”, or “castle”.'; return; }
+      if (queueEntry) {
+        if (new Set(commands.filter(command => command?.kind === 'move').map(command => command.san)).size !== 1) {
+          status.textContent = 'Unclear move sequence. Say the queue again.';
+          return;
+        }
+        enterQueue(false);
+        moves.append([commands.find(command => command?.kind === 'move')]);
+        return;
+      }
       try {
         const position = VoiceChessBoard.snapshot();
-        // Keep an unchanged position locked, but accept the next final command
-        // as soon as the board has advanced instead of waiting for the watchdog.
-        if (waitingPosition && waitingPosition.element === position.element && waitingPosition.game === position.game && waitingPosition.fen === position.fen) return;
-        if (waitingPosition) {
-          clearTimeout(pendingCheck);
-          pendingCheck = null;
-          waitingPosition = null;
-        }
         const result = VoiceChessCommands.resolveAlternatives(candidates, position.moves);
         if (result.error) { status.textContent = result.error; return; }
         if (result.transcript !== text) transcript.textContent = `${text} → ${result.transcript}`;
-        const move = result.move;
-        const key = `${position.fen}:${move.from}${move.to}${move.promotion ?? ''}`;
-        if (lastSubmission === key) { status.textContent = 'Already sent. Wait for the board to change.'; return; }
-        waitingPosition = position;
-        const version = sessionVersion;
-        let submission;
-        submitting = true;
-        try { submission = VoiceChessBoard.play(position, move); } catch (error) {
-          waitingPosition = null;
-          throw error;
-        } finally { submitting = false; }
-        lastSubmission = key;
-        if (version !== sessionVersion) return;
-        status.textContent = submission?.uncertain ? 'Could not confirm the move. Checking board…' : `Sent ${move.san}`;
-        // Some board versions throw after emitting a user move. Never resend it.
-        pendingCheck = setTimeout(() => {
-          if (version !== sessionVersion) return;
-          pendingCheck = null;
-          waitingPosition = null;
-          try {
-            if (!position.element.isConnected) return;
-            if (position.game.getFEN() !== position.fen) { status.textContent = `Sent ${move.san}`; return; }
-          } catch { return; /* Board destroyed during a puzzle transition. */ }
-          status.textContent = submission?.uncertain ? 'Board rejected the move. Use the mouse, then retry.' : 'Board did not change. Check the puzzle is running.';
-        }, 600);
+        if (moves.moves.length) moves.clear(); // A fresh immediate move replaces the remaining plan.
+        moves.send(position, result.move);
       } catch (error) {
         status.textContent = error.message || 'Could not read this board.';
       }
     },
   });
+  root.querySelector('.clear-queue').addEventListener('click', () => { enterQueue(false); moves.clear('Queue cleared.'); speech.refreshVocabulary(true); });
+  queueEntryButton.addEventListener('click', () => {
+    enterQueue(!queueEntry);
+    if (!queueEntry) status.textContent = 'Listening · offline';
+    speech.refreshVocabulary(true);
+  });
+  setInterval(() => {
+    if (speech.active && isRush() && !document.hidden) moves.tick();
+  }, 50);
 
   toggle.addEventListener('click', () => {
     if (speech.active) { speech.stop(); return; }
     if (!isRush() || document.hidden) return;
-    try { VoiceChessBoard.snapshot(); } catch (error) { status.textContent = error.message; return; }
+    try {
+      const position = VoiceChessBoard.observe();
+      if (!position.moves.length && position.waiting !== 'animation') throw new Error('No moves available. Start the next puzzle.');
+    } catch (error) { status.textContent = error.message; return; }
     transcript.textContent = '';
-    lastSubmission = null;
+    moves.reset();
     speech.start();
   });
   document.addEventListener('visibilitychange', () => {

@@ -27,7 +27,7 @@
     "run_at": "document_idle"
   }, {
     "matches": ["https://www.chess.com/puzzles/rush", "https://www.chess.com/puzzles/rush/*", "https://www.chess.com/puzzles/rush?*"],
-    "js": ["commands.js", "board.js", "speech.js", "content.js"],
+    "js": ["commands.js", "board.js", "queue.js", "speech.js", "content.js"],
     "world": "MAIN",
     "run_at": "document_idle"
   }]

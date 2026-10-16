@@ -31,19 +31,29 @@ No Node installation or npm command is needed for normal use. The bundled model 
 | `e8=Q` / `e8=N` | “e eight queen” / “e eight knight” | Promote to the specified piece; “equals” is optional |
 | `dxe8=N` | “d e knight” or “d e eight knight” | Capture and promote; the piece remains mandatory |
 | `Qh7+` / `Qh7#` | “queen h seven check” / “queen h seven checkmate” | Include check or mate |
+| Enter a queue | “queue” or “premove”, or click **Queue moves** | Switch to queue entry; wait for the queue prompt |
+| Move chain, during queue entry | “knight f three then bishop c four” | Play your moves in order, waiting for the opponent between them |
+| Append a premove | Enter a queue again, then say “bishop c four” | Append a move, including during the opponent's turn |
+| Clear premoves | “clear queue” or “cancel queue” | Cancel all moves still waiting in the queue |
 | — | “stop”, “pause”, “stop listening”, “pause listening”, “microphone off” | Turn the microphone off |
 
 Speak file letters and full piece names. SAN follows the [PGN notation specification](https://www.saremba.de/chessgml/standards/pgn/pgn-complete.htm). Spoken moves normalize to that notation and resolve against the board's own complete legal SAN. You may omit captures, check and mate markers; explicit “takes” must match a capture, and explicit check or mate must be correct. Pawn captures require both files: “e five” alone does not request a capture.
 
 If both `dxe5` and `dxe3` are legal, “d e” shows both choices; say “d e five” to specify the rank. If both castles are legal, specify the side. Ambiguous pieces require the appropriate file, rank, or full source square as SAN disambiguation. Promotions always require a queen, rook, bishop, or knight, even when only one promotion is supplied by the board. Shorthand never chooses a puzzle answer for you.
 
-Source/destination commands (“e two to e four”), NATO files, filler (“knight to f three”), and multiple moves in one utterance are rejected. Use one move at a time and leave a brief pause for the recognizer to finish. The parser still understands compact SAN and earlier transcript corrections, but the speech engine's vocabulary uses spoken moves rather than arbitrary dictated text.
+With the microphone listening, say **“queue”** as a separate utterance or click **Queue moves**. Wait for **Queue moves: say your moves separated by “then”**, then speak a move or chain. Queue entry ends after one valid final command; enter it again to append more moves. Click **Cancel queue entry** or say “clear queue” to leave it. Normal listening keeps its smaller legal-move vocabulary to avoid degrading ordinary recognition.
+
+Separate chained moves with “then”; include only **your** moves, leaving Chess.com to play the opponent's replies. During queue entry, “queue knight f three then bishop c four” and “premove bishop c four” also work. The first move plays as soon as your turn and board are ready. Later moves are checked against the board's legal SAN on each turn; future legality is not predicted. Queues hold at most six pending moves and expire after 15 seconds without progress. The control displays the remaining moves and a **Clear** button. A new valid immediate move replaces the remaining queue.
+
+An invalid or ambiguous queued move clears the rest and displays the reason. Queues also clear when listening stops, the tab is hidden, the page exits, the board is replaced or disabled, a submission is uncertain or unconfirmed, or an unexpected position change is observed. Continuation requires observing each transition through one of the board's native legal moves, including the submitted move itself. A reset, manual move, or skipped transition cancels the plan; queued moves are never carried forward based only on another legal match. Clearing cancels pending requests, not a move already sent to the board.
+
+Source/destination commands (“e two to e four”), NATO files, filler (“knight to f three”), and unseparated move lists (“e four knight f three”) are rejected. Leave a brief pause after a move or complete chain for the recognizer to finish. The parser still understands compact SAN and earlier transcript corrections, but the speech engine's vocabulary uses spoken moves rather than arbitrary dictated text.
 
 ## Recognition and safety
 
-Vosk runs locally in a worker with a vocabulary derived from **all current legal moves**, plus stop controls. The vocabulary refreshes when the board, FEN, or board availability changes. No puzzle solution, engine analysis, or preferred move is supplied. Ambiguous and incomplete forms are also included as guard phrases so the recognizer can pass them through for clarification or rejection rather than invent a source piece or promotion.
+Vosk runs locally in a worker with a vocabulary derived from **all current legal moves**, plus queue-entry and stop/cancel controls. During queue entry only, generic spoken notation for future moves is added. These forms describe command syntax and supply no legal or preferred continuation. The vocabulary refreshes when the board, FEN, player side, readiness, or queue-entry mode changes. No puzzle solution, engine analysis, or preferred move is supplied. Ambiguous and incomplete forms are also included as guard phrases so the recognizer can pass them through for clarification or rejection rather than invent a source piece or promotion.
 
-Vosk's constrained language model can still mishear speech or recombine words. Unknown results and transcripts outside the complete supplied phrase list are rejected. Only final results can submit a move; interim text is display only. A final result consumes its recognizer, and buffered or late results are discarded before the next command. Position changes invalidate pending speech even when the legal vocabulary happens to be identical.
+Vosk's constrained language model can still mishear speech or recombine words. Ordinary transcripts outside the supplied phrase list are rejected; during queue entry, moves and “then” chains must pass the complete command parser. A malformed or low-confidence chain is rejected in full before any of its moves are queued. Only final results can submit or queue moves; interim text is display only. A final result consumes its recognizer, and buffered or late results are discarded before the next command. Position changes invalidate pending speech even when the legal vocabulary happens to be identical. Queued commands remain only in memory while listening.
 
 Because “a”, “c”, “e”, “f”, and “g” can be confused, a final move containing any of these file letters requires a reported word confidence of at least 0.8 for each occurrence. Otherwise the control asks you to repeat and leaves the board untouched. This catches uncertain readings; a confidently misheard letter can still pass. No file is automatically substituted.
 
@@ -85,6 +95,7 @@ extension/
   manifest.json   Puzzle Rush scope, local WASM CSP, packaged frame access
   commands.js     Transcript parsing, legal-move vocabulary and resolution
   board.js        Chess.com board API adapter
+  queue.js        Bounded premoves, board continuity and submission tracking
   speech.js       Page audio capture, position epochs and recognition lifecycle
   content.js      Small page control and command delivery
   bridge.js       Isolated-world connection to the extension frame

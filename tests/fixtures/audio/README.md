@@ -16,6 +16,8 @@ and its output provision (section 2). The synthesizer is not shipped with the ex
 | `stop.wav` | `stop` | 180 |
 | `stop-listening.wav` | `stop listening` | 180 |
 | `unrelated.wav` | `good morning everyone` | 180 |
+| `queue.wav` | `queue` | 190 |
+| `knight-f-three-then-bishop-c-four.wav` | `knight F, three then bishop C, four` | 190 |
 
 The bare synthetic “stop” can be rejected as unknown; the test follows it with
 “stop listening” when necessary. Both must leave the chess position untouched.

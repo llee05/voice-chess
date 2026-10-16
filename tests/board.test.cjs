@@ -97,6 +97,39 @@ test('blocks opponent turns', () => {
   const f = fixture();
   f.setFen(initial.replace(' w ', ' b '));
   assert.throws(() => board.snapshot(f.doc), /your turn/);
+  const observed = board.observe(f.doc);
+  assert.equal(observed.waiting, 'opponent');
+  assert.equal(observed.moves[0].san, 'Ke7');
+  assert.equal(f.submissions.length, 0);
+});
+
+test('verifies observed native moves and rejects resets, skipped positions and different moves', () => {
+  const f = fixture();
+  const before = board.observe(f.doc);
+  f.setFen('4k3/8/8/8/8/5N2/8/4K3 b - - 1 1');
+  const after = board.observe(f.doc);
+  assert.equal(board.follows(before, after, before.moves[0]), true);
+  assert.equal(board.follows(before, { ...after, game: {} }), false);
+  assert.equal(board.follows(before, { ...after, fen: after.fen.replace('1 1', '1 3') }), false);
+  f.setFen('4k3/8/8/8/8/7N/8/4K3 b - - 1 1');
+  assert.equal(board.follows(before, board.observe(f.doc)), false, 'An unreported move is not a continuation');
+  f.setFen('4k3/8/8/8/8/5N2/8/R3K3 b - - 1 1');
+  assert.equal(board.follows(before, board.observe(f.doc)), false, 'A changed puzzle is not a continuation');
+});
+
+test('native continuity checks preserve captures, promotions, castling and en passant for either color', () => {
+  for (const [start, end, native] of [
+    ['4k3/8/8/8/8/5p2/8/4K1N1 w - - 0 1', '4k3/8/8/8/8/5N2/8/4K3 b - - 0 1', { from: 'g1', to: 'f3', san: 'Nxf3' }],
+    ['4k3/P7/8/8/8/8/8/4K3 w - - 0 1', 'N3k3/8/8/8/8/8/8/4K3 b - - 0 1', { from: 'a7', to: 'a8', san: 'a8=N', promotion: 'N' }],
+    ['4k3/8/8/8/8/8/8/4K2R w K - 0 1', '4k3/8/8/8/8/8/8/5RK1 b - - 1 1', { from: 'e1', to: 'g1', san: 'O-O' }],
+    ['r3k3/8/8/8/8/8/8/4K3 b q - 0 1', '2kr4/8/8/8/8/8/8/4K3 w - - 1 2', { from: 'e8', to: 'c8', san: 'O-O-O' }],
+    ['4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1', '4k3/8/3P4/8/8/8/8/4K3 b - - 0 1', { from: 'e5', to: 'd6', san: 'exd6' }],
+  ]) {
+    const f = fixture(); f.setFen(start); f.game.getLegalMoves = () => [native];
+    const before = board.observe(f.doc);
+    f.setFen(end);
+    assert.equal(board.follows(before, board.observe(f.doc), before.moves[0]), true, native.san);
+  }
 });
 
 test('does not enable the microphone on the idle Puzzle Rush board', () => {

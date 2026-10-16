@@ -29,6 +29,7 @@ function fixture(options = {}) {
     },
     timers: { setTimeout(fn) { const id = Symbol(); tasks.set(id, fn); return id; }, clearTimeout(id) { tasks.delete(id); } },
     onState: (...args) => states.push(args), onTranscript: text => transcripts.push(text),
+    acceptsQueue: options.acceptsQueue,
     onCommand(text) { commands.push(text); if (options.command) options.command(session, text); },
   });
   function emit(type, text, epoch = session.epoch, connection = connections.at(-1), words = text?.split(' ').map(word => ({ word, conf: 1 }))) {
@@ -125,6 +126,25 @@ test('uncertain a/c/e/f/g files require repetition without substituting another 
   assert.deepEqual(f.commands, files.map(file => `${file} four`));
   result('stop', [{ word: 'stop', conf: 0.3 }]);
   assert.equal(f.commands.at(-1), 'stop', 'File guard must not interfere with stop commands');
+});
+
+test('queue acceptance remains final-only and checks confidence throughout the chain', async () => {
+  const { parse } = load('commands.js', 'VoiceChessCommands');
+  const f = fixture({ acceptsQueue: text => parse(text)?.kind === 'queue' });
+  await f.session.start(); f.ready();
+  const chain = 'knight f three then bishop c four';
+  f.emit('partial', chain);
+  assert.deepEqual(f.commands, []);
+  const words = chain.split(' ').map(word => ({ word, conf: word === 'c' ? 0.7 : 1 }));
+  f.emit('result', chain, f.session.epoch, f.connections.at(-1), words);
+  assert.deepEqual(f.commands, []);
+  assert.match(f.states.at(-1)[1], /Unclear file letter/);
+  f.emit('ready'); f.emit('result', 'knight f three then please bishop c four');
+  assert.deepEqual(f.commands, []);
+  f.emit('ready'); f.emit('result', chain);
+  assert.deepEqual(f.commands, [chain]);
+  f.emit('ready'); f.emit('result', 'queue queen h seven');
+  assert.deepEqual(f.commands, [chain, 'queue queen h seven']);
 });
 
 test('stop commands close microphone, audio nodes and recognizer connection', async () => {

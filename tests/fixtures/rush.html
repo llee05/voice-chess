@@ -23,6 +23,7 @@
     fen: '4k3/8/8/8/8/8/3N4/4K1N1 w - - 0 1',
     player: 1, mode: 'puzzle', animating: false, enabled: true, submitted: [], reject: false, throwAfterMove: false,
     micError: null, tracksStopped: 0, contextsClosed: 0,
+    replyMoves: [{ from: 'e8', to: 'e7', san: 'Ke7' }],
     moves: [{ from: 'g1', to: 'f3', san: 'Ngf3' }, { from: 'd2', to: 'f3', san: 'Ndf3' }, { from: 'e1', to: 'f1', san: 'Kf1' }],
   };
   const symbols = { p: 'P', n: 'N', b: 'B', r: 'R', q: 'Q', k: 'K' };
@@ -55,7 +56,7 @@
     getMode: () => ({ name: fixture.mode }),
     isAnimating: () => fixture.animating,
     getOptions: () => ({ enabled: fixture.enabled, flipped: fixture.player === 2 }),
-    getLegalMoves: () => fixture.moves,
+    getLegalMoves: () => fixture.fen.split(' ')[1] === (fixture.player === 1 ? 'w' : 'b') ? fixture.moves : fixture.replyMoves,
     move(move) {
       fixture.submitted.push(move);
       if (fixture.reject) throw new Error('Input disabled');
@@ -73,7 +74,8 @@
         }
         rows.push(row + (empty || ''));
       }
-      fixture.fen = rows.join('/') + ' ' + (fixture.player === 1 ? 'b' : 'w') + ' - - 0 1';
+      const fullmove = Number(fixture.fen.split(' ')[5]) + (fixture.player === 2 ? 1 : 0);
+      fixture.fen = rows.join('/') + ' ' + (fixture.player === 1 ? 'b' : 'w') + ' - - 0 ' + fullmove;
       render();
       if (fixture.throwAfterMove) throw new Error('Thrown after dispatch');
     },
