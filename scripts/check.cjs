@@ -17,7 +17,7 @@ assert.deepEqual(manifest.content_security_policy, { extension_pages: "script-sr
 assert.deepEqual(manifest.web_accessible_resources, [{ resources: ['recognizer.html'], matches: ['https://www.chess.com/*'] }]);
 for (const [index, script] of manifest.content_scripts.entries()) {
   assert.deepEqual(script.matches, ['https://www.chess.com/puzzles/rush', 'https://www.chess.com/puzzles/rush/*', 'https://www.chess.com/puzzles/rush?*'], 'Keep injection limited to Puzzle Rush');
-  assert.deepEqual(script.js, index === 0 ? ['bridge.js'] : ['commands.js', 'board.js', 'queue.js', 'speech.js', 'content.js'], 'Content script dependency order changed');
+  assert.deepEqual(script.js, index === 0 ? ['bridge.js'] : ['commands.js', 'board.js', 'submission.js', 'speech.js', 'content.js'], 'Content script dependency order changed');
   assert.equal(script.world, index === 0 ? 'ISOLATED' : 'MAIN');
   assert.equal(script.run_at, 'document_idle');
   assert.ok(!script.all_frames, 'Inject only in the top-level page');

@@ -1,10 +1,10 @@
 // Audio stays on the puzzle page; PCM and vocabulary cross a private port.
 const VoiceChessSpeech = class {
-  constructor({ getVocabulary, onState, onTranscript, onCommand, acceptsQueue = () => false,
+  constructor({ getVocabulary, onState, onTranscript, onCommand,
     getUserMedia = constraints => navigator.mediaDevices.getUserMedia(constraints),
     AudioContext = globalThis.AudioContext, connect = VoiceChessSpeech.connect,
     timers = globalThis }) {
-    Object.assign(this, { getVocabulary, onState, onTranscript, onCommand, acceptsQueue, getUserMedia, AudioContext, connect, timers });
+    Object.assign(this, { getVocabulary, onState, onTranscript, onCommand, getUserMedia, AudioContext, connect, timers });
     this.active = false;
     this.version = 0;
     this.epoch = 0;
@@ -83,13 +83,13 @@ const VoiceChessSpeech = class {
   refreshVocabulary(force = false) {
     if (!this.active || !this.processor || !this.connection) return;
     try {
-      const { key, phrases, queuePhrases } = this.getVocabulary();
+      const { key, phrases } = this.getVocabulary();
       if (!force && this.vocabularyKey === key) return;
       this.vocabularyKey = key;
       this.phrases = new Set(phrases);
       this.readyEpoch = null;
       this.connection.port.postMessage({ type: 'configure', epoch: ++this.epoch,
-        sampleRate: this.context.sampleRate, phrases: [...this.phrases], ...(queuePhrases ? { queuePhrases } : {}) });
+        sampleRate: this.context.sampleRate, phrases: [...this.phrases] });
     } catch { this.stop('Could not prepare the move vocabulary. Click the mic to retry.'); }
   }
 
@@ -114,7 +114,7 @@ const VoiceChessSpeech = class {
     if (message.type !== 'result') return;
     // Vosk can recombine grammar words. Require a complete supplied phrase;
     // the parser then enforces legality and ambiguity against native SAN.
-    if (!this.phrases.has(text) && !this.acceptsQueue(text)) this.onState(true, 'Unclear speech. Say one move again, or chain moves with “then”.');
+    if (!this.phrases.has(text)) this.onState(true, 'Unclear speech. Say one move again.');
     // A legal move cannot reveal a misheard file. Require confidence in each
     // commonly confused file token rather than substituting or guessing a move.
     else if (text.split(' ').some((word, index) => /^[acefg]$/.test(word) &&

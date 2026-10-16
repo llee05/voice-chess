@@ -68,32 +68,6 @@ const VoiceChessBoard = (() => {
     return position;
   }
 
-  // Verify an observed transition using supplied native moves. This never
-  // generates moves or decides legality from piece movement geometry.
-  function follows(before, after, expected) {
-    if (before.element !== after.element || before.game !== after.game || before.player !== after.player || before.turn === after.turn) return false;
-    const first = before.fen.split(' '), second = after.fen.split(' ');
-    if (!/^[1-9]\d*$/.test(first[5]) || Number(second[5]) !== Number(first[5]) + (before.turn === 'b' ? 1 : 0)) return false;
-    const target = piecesFromFen(after.fen);
-    return before.moves.some(move => {
-      if (expected && (move.from !== expected.from || move.to !== expected.to || move.promotion !== expected.promotion || move.san !== expected.san)) return false;
-      const pieces = piecesFromFen(before.fen);
-      const piece = pieces.get(move.from);
-      if (!piece) return false;
-      if (piece.type === 'p' && move.san.includes('x') && !pieces.has(move.to)) pieces.delete(move.to[0] + move.from[1]);
-      pieces.delete(move.from);
-      pieces.set(move.to, { type: move.promotion ?? piece.type, color: piece.color });
-      if (/^O-O/.test(move.san)) {
-        const rank = move.from[1], long = move.san.startsWith('O-O-O');
-        const rook = pieces.get((long ? 'a' : 'h') + rank);
-        if (rook?.type !== 'r' || rook.color !== piece.color) return false;
-        pieces.delete((long ? 'a' : 'h') + rank);
-        pieces.set((long ? 'd' : 'f') + rank, rook);
-      }
-      return pieces.size === target.size && [...pieces].every(([square, value]) => target.get(square)?.type === value.type && target.get(square)?.color === value.color);
-    });
-  }
-
   function play(position, move, doc = document) {
     const current = snapshot(doc);
     if (current.element !== position.element || current.game !== position.game || current.fen !== position.fen) throw new Error('The puzzle changed. Say your move again.');
@@ -110,5 +84,5 @@ const VoiceChessBoard = (() => {
     }
   }
 
-  return Object.freeze({ snapshot, observe, follows, play, piecesFromFen, findElement });
+  return Object.freeze({ snapshot, observe, play, piecesFromFen, findElement });
 })();

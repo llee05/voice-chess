@@ -22,7 +22,7 @@
 | `extension/manifest.json` | Extension metadata, page matching, script order, and packaged assets |
 | `extension/commands.js` | Pure transcript parsing and selection from supplied legal moves |
 | `extension/board.js` | Chess.com's board API, position snapshots, and move submission |
-| `extension/queue.js` | Bounded move queue, observed position continuity, and submission tracking |
+| `extension/submission.js` | Single-move confirmation and duplicate protection |
 | `extension/speech.js` | Speech recognition lifecycle, final results, and bounded reconnection |
 | `extension/content.js` | Page control, command delivery, duplicate protection, and navigation handling |
 | `extension/popup.html`, `extension/popup.css` | Toolbar shortcut to Puzzle Rush |
@@ -34,7 +34,7 @@
 
 ## Extension architecture
 
-- Content scripts are classic scripts, loaded in this order: `commands.js`, `board.js`, `queue.js`, `speech.js`, `content.js`. Preserve their shared `VoiceChessCommands`, `VoiceChessBoard`, `VoiceChessQueue`, and `VoiceChessSpeech` bindings and dependency order. Do not introduce module imports without updating how the extension loads them.
+- Content scripts are classic scripts, loaded in this order: `commands.js`, `board.js`, `submission.js`, `speech.js`, `content.js`. Preserve their shared `VoiceChessCommands`, `VoiceChessBoard`, `VoiceChessSubmission`, and `VoiceChessSpeech` bindings and dependency order. Do not introduce module imports without updating how the extension loads them.
 - Scripts run in the `MAIN` page world so they can access the board's `game` object. Do not assume isolated-world extension APIs such as `chrome.runtime` or `chrome.storage` are available there.
 - Keep page matching and runtime route checks limited to Puzzle Rush. Changes must continue to stop the microphone and hide the control when Chess.com navigates elsewhere without reloading.
 - The manifest currently declares no extra API permissions or host permissions. Keep permissions limited to what the feature actually requires and update checks and documentation if they change.
@@ -44,9 +44,9 @@
 ## Move handling
 
 - Only final recognition results may submit moves. Interim results are for display.
-- Accept standard algebraic notation (SAN) for moves (`e4`, `Nf3`, `Qxh7`, `Ngf3`, `O-O`, `e8=Q`) and documented shorthand. Spoken piece names, ranks, and notation symbols may normalize to SAN (e.g. “knight f three” → `Nf3`). Support omitted capture markers, pawn capture file pairs (`de`), castling phrases, and omitted promotion equals signs. Accept explicit `queue`/`premove` commands and chains separated by `then`; reject source/destination commands, NATO files, extra filler, and unseparated move lists.
-- Queue only the user's requested moves, resolving each against native legal SAN when its turn arrives. Never infer future replies or legality. Keep queues bounded and cancel them on ambiguity, rejection, stopping, or an unverified position transition. Never replay a pending or uncertain submission.
-- Chaining and premoves activate automatically while listening. Do not require a queue-entry click or separate setup utterance. Keep ordinary recognition constrained to current legal moves; use bounded in-memory re-decoding for detected chains and prefixes before submitting any part.
+- Accept standard algebraic notation (SAN) for moves (`e4`, `Nf3`, `Qxh7`, `Ngf3`, `O-O`, `e8=Q`) and documented shorthand. Spoken piece names, ranks, and notation symbols may normalize to SAN (e.g. “knight f three” → `Nf3`). Support omitted capture markers, pawn capture file pairs (`de`), castling phrases, and omitted promotion equals signs. Accept one move at a time; reject move chains, `queue`/`premove` commands, source/destination commands, NATO files, extra filler, and unseparated move lists.
+- Submit only the user's current move, resolving it against native legal SAN. Discard commands during the opponent's turn, animation, or a pending submission. Never retain future moves or replay a pending or uncertain submission.
+- Keep recognition constrained to current legal moves and microphone stop controls. Do not add chaining, premoves, or audio re-decoding for future positions.
 - Resolve requests against the board's own complete legal SAN. Shorthand must identify one move; show the matching SAN choices when ambiguous. Explicit capture markers must match captures, pawn captures still require both files, and promotion pieces remain mandatory. Check/mate suffixes may be omitted; when supplied they must match. Do not implement a second rules engine or infer legality from piece movement geometry.
 - Never pick between ambiguous source pieces. Show the matching disambiguated SAN choices and leave the board untouched.
 - Confirm the board instance and FEN still match the snapshot immediately before submission. Block moves on idle, disabled, animating, finished, or opponent-turn positions.

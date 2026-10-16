@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { load, plain } = require('./helpers.cjs');
-const { parse, resolve, resolveAlternatives, vocabulary, queueVocabulary } = load('commands.js', 'VoiceChessCommands');
+const { parse, resolve, resolveAlternatives, vocabulary } = load('commands.js', 'VoiceChessCommands');
 
 for (const [text, san] of [
   ['e4', 'e4'], ['e5', 'e5'], ['E4', 'e4'], ['e four', 'e4'], ['e five', 'e5'],
@@ -351,32 +351,23 @@ test('spoken vocabulary preserves check on castling and uses separate mate words
   }
 });
 
-test('missing or nonstandard legal SAN produces only queue and microphone controls, without invented hints', () => {
+test('missing or nonstandard legal SAN produces only microphone controls, without invented hints', () => {
   const controls = Array.from(vocabulary([]));
   assert.ok(controls.length > 0);
-  assert.ok(controls.every(phrase => ['stop', 'clearQueue'].includes(parse(phrase).kind)));
+  assert.ok(controls.every(phrase => parse(phrase).kind === 'stop'));
   assert.deepEqual(Array.from(vocabulary([{ from: 'g1', to: 'f3' }])), controls);
   assert.deepEqual(Array.from(vocabulary([move('96', 'f4', 'e6')])), controls);
 });
 
-test('explicit queue commands and then-separated moves preserve requested order', () => {
-  for (const text of ['queue Nf3 then Bc4', 'premove knight f three then bishop c four', 'knight f three then bishop c four']) {
-    assert.deepEqual(plain(parse(text)), { kind: 'queue', moves: [{ kind: 'move', san: 'Nf3' }, { kind: 'move', san: 'Bc4' }] });
-  }
-  assert.deepEqual(plain(parse('queue e8 knight')), { kind: 'queue', moves: [{ kind: 'move', san: 'e8=N' }] });
-  assert.deepEqual(plain(parse('castle then d e')), { kind: 'queue', moves: [{ kind: 'move', san: 'castle' }, { kind: 'move', san: 'dxe' }] });
-  for (const text of ['clear queue', 'cancel queue']) assert.equal(parse(text).kind, 'clearQueue');
-});
-
-test('rejects an entire malformed or oversized chain before executing any part', () => {
-  for (const text of ['queue', 'premove', 'queue stop', 'queue clear queue', 'queue queue e4', 'e4 then', 'then e4',
+test('rejects move chains, premoves and removed queue controls in full', () => {
+  for (const text of ['Nf3 then Bc4', 'knight f three then bishop c four', 'castle then d e',
+    'queue Nf3', 'premove knight f three', 'queue e8 knight', 'clear queue', 'cancel queue',
+    'queue', 'premove', 'queue stop', 'queue clear queue', 'queue queue e4', 'e4 then', 'then e4',
     'e4 then then Nf3', 'e4 then please Nf3', 'e4 then e2e4', 'e4 and Nf3', 'e4, Nf3',
-    'e4 then queue Nf3', 'e4 then stop', Array(7).fill('e4').join(' then ')]) {
+    'e4 then queue Nf3', 'e4 then stop', Array(6).fill('e4').join(' then ')]) {
     assert.equal(parse(text), null, text);
   }
-  assert.equal(parse(Array(6).fill('e4').join(' then ')).moves.length, 6);
-  const phrases = queueVocabulary();
-  assert.ok(phrases.length < 3000);
-  assert.ok(phrases.every(phrase => phrase.length <= 160 && /^[a-z]+(?: [a-z]+)*$/.test(phrase)));
-  for (const phrase of ['then knight f three', 'queue queen f three', 'premove castle', 'g three', 'rook one a one', 'e eight knight', 'three then']) assert.ok(phrases.includes(phrase));
+  const phrases = vocabulary([move('Nf3', 'g1', 'f3')]);
+  assert.ok(phrases.includes('knight f three'));
+  assert.ok(phrases.every(phrase => !/\b(then|queue|premove)\b/.test(phrase)));
 });

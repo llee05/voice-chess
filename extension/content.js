@@ -24,10 +24,6 @@
       svg { width: 19px; height: 19px; }
       .transcript { margin: 0 14px 12px; color: #dce5ce; font-size: 13px; overflow-wrap: anywhere; }
       .transcript:empty { display: none; }
-      .queued { display: flex; gap: 8px; align-items: center; margin: 0 14px 12px; color: #dce5ce; overflow-wrap: anywhere; }
-      .queued[hidden] { display: none; }
-      .queue-copy { flex: 1; min-width: 0; }
-      .clear-queue { width: auto; height: auto; padding: 4px 8px; border-radius: 6px; font: inherit; }
       .privacy { margin: 0; padding: 0 14px 12px; color: #969c8c; font-size: 11px; }
       @media (max-width: 400px) { :host { right: 12px; bottom: 12px; } .panel { width: min(260px, calc(100vw - 24px)); } }
     </style>
@@ -39,7 +35,6 @@
         </button>
       </div>
       <div class="transcript"></div>
-      <div class="queued" hidden><span class="queue-copy" aria-live="polite"></span><button class="clear-queue" type="button" aria-label="Clear queued moves">Clear</button></div>
       <p class="privacy">Offline speech · bundled English model</p>
     </section>`;
   // Stay outside Chess.com's body containers, which may clip or transform children.
@@ -48,19 +43,10 @@
   const status = root.querySelector('.status');
   const transcript = root.querySelector('.transcript');
   const toggle = root.querySelector('button');
-  const queued = root.querySelector('.queued');
-  const queueCopy = root.querySelector('.queue-copy');
-  const queueWords = [...VoiceChessCommands.vocabulary([]), ...VoiceChessCommands.queueVocabulary()];
-  const moves = new VoiceChessQueue({
+  const submission = new VoiceChessSubmission({
     read: () => VoiceChessBoard.observe(),
-    resolve: VoiceChessCommands.resolve,
     play: (position, move) => VoiceChessBoard.play(position, move),
-    follows: VoiceChessBoard.follows,
     onStatus(message) { status.textContent = message; },
-    onQueue(commands) {
-      queued.hidden = !commands.length;
-      queueCopy.textContent = commands.length ? `Queued: ${commands.map(command => command.san).join(' → ')}` : '';
-    },
   });
   let vocabularyPosition = null;
   let vocabularyVersion = 0;
@@ -74,10 +60,9 @@
         position?.waiting !== vocabularyPosition?.waiting || position?.player !== vocabularyPosition?.player) {
         vocabularyPosition = position;
         vocabularyVersion++;
-        const legalPhrases = VoiceChessCommands.vocabulary(position?.moves ?? []);
-        vocabularyPhrases = position?.waiting ? queueWords : [...legalPhrases, ...legalPhrases.filter(phrase => VoiceChessCommands.parse(phrase)?.kind === 'move').map(phrase => `${phrase} then`), 'then', 'queue', 'premove'];
+        vocabularyPhrases = VoiceChessCommands.vocabulary(position && !position.waiting ? position.moves : []);
       }
-      return { key: vocabularyVersion, phrases: vocabularyPhrases, queuePhrases: queueWords };
+      return { key: vocabularyVersion, phrases: vocabularyPhrases };
     },
     onState(active, message) {
       toggle.setAttribute('aria-pressed', String(active));
@@ -86,56 +71,29 @@
       toggle.title = label;
       status.textContent = message;
       if (!active) {
-        moves.reset();
+        submission.reset();
       }
     },
     onTranscript(text) { transcript.textContent = text; },
-    acceptsQueue(text) {
-      const kind = VoiceChessCommands.parse(text)?.kind;
-      return kind === 'queue' || (Boolean(vocabularyPosition?.waiting) && kind === 'move');
-    },
     onCommand(text, alternatives = [text]) {
       if (!isRush() || document.hidden) return;
       const candidates = alternatives.slice(0, 5);
       const commands = candidates.map(candidate => VoiceChessCommands.parse(candidate));
       if (commands.some(command => command?.kind === 'stop')) { speech.stop(); return; }
-      if (commands.some(command => command?.kind === 'clearQueue')) { moves.clear('Queue cleared.'); return; }
-      const chains = commands.filter(command => command?.kind === 'queue');
-      if (chains.length) {
-        // Never choose between different interpretations of an entire chain.
-        if (commands.some(command => command?.kind === 'move') || new Set(chains.map(command => JSON.stringify(command.moves))).size !== 1) {
-          status.textContent = 'Unclear move sequence. Say the queue again.';
-          return;
-        }
-        moves.append(chains[0].moves);
-        return;
-      }
       if (!commands.some(command => command?.kind === 'move')) { status.textContent = 'Use standard notation or shorthand: Nf3, “d e”, or “castle”.'; return; }
       try {
-        const observed = VoiceChessBoard.observe();
-        if (observed.waiting || moves.moves.length || moves.pending) {
-          if (moves.pending?.position.fen === observed.fen) {
-            const repeated = VoiceChessCommands.resolveAlternatives(candidates, moves.pending.position.moves);
-            if (repeated.move === moves.pending.move) return;
-          }
-          const requested = commands.filter(command => command?.kind === 'move');
-          if (new Set(requested.map(command => command.san)).size !== 1) { status.textContent = 'Unclear premove. Say the move again.'; return; }
-          moves.append([requested[0]]);
-          return;
-        }
         const position = VoiceChessBoard.snapshot();
         const result = VoiceChessCommands.resolveAlternatives(candidates, position.moves);
         if (result.error) { status.textContent = result.error; return; }
         if (result.transcript !== text) transcript.textContent = `${text} → ${result.transcript}`;
-        moves.send(position, result.move);
+        submission.send(position, result.move);
       } catch (error) {
         status.textContent = error.message || 'Could not read this board.';
       }
     },
   });
-  root.querySelector('.clear-queue').addEventListener('click', () => moves.clear('Queue cleared.'));
   setInterval(() => {
-    if (speech.active && isRush() && !document.hidden) moves.tick();
+    if (speech.active && isRush() && !document.hidden) submission.tick();
   }, 50);
 
   toggle.addEventListener('click', () => {
@@ -146,7 +104,7 @@
       if (!position.moves.length && position.waiting !== 'animation') throw new Error('No moves available. Start the next puzzle.');
     } catch (error) { status.textContent = error.message; return; }
     transcript.textContent = '';
-    moves.reset();
+    submission.reset();
     speech.start();
   });
   document.addEventListener('visibilitychange', () => {
